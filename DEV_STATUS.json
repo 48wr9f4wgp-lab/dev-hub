@@ -10,7 +10,7 @@
     "performance": "warn",
     "release": "ok"
   },
-  "next": "DEV_STATUS表示をiPhone実機で確認する",
-  "note": "GitHub Pages公開とiPhone表示は確認済み。自動テストと性能確認は一部のみ。",
+  "next": "DEV_STATUS表示とカード一覧をiPhone実機で回帰確認する",
+  "note": "GitHub Pages公開とiPhone表示は確認済み。Pages公開前にJavaScript構文とDEV_STATUSスキーマを自動検証する。自動テストと性能確認は一部のみ。",
   "updated_at": "2026-09-15"
 }
