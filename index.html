@@ -86,7 +86,7 @@
 
 <script>
 const OWNER='48wr9f4wgp-lab';
-const LS_META='devhub.meta.v2', LS_TOKEN='devhub.token.v1', LS_CACHE='devhub.cache.v12', LS_REPOS='devhub.repos.v1';
+const LS_META='devhub.meta.v2', LS_TOKEN='devhub.token.v1', LS_CACHE='devhub.cache.v13', LS_REPOS='devhub.repos.v1';
 const state={repos:[],scans:{},role:'all',kind:'all',tech:'all',status:'all',vis:'all',q:'',active:null};
 const $=s=>document.querySelector(s);const cards=$('#cards'),supportCards=$('#supportCards'),pinnedCards=$('#pinnedCards'),msg=$('#message');
 const statusLabels={'not-started':'未着手','development':'開発中','hold':'保留','complete':'完了'};
@@ -173,26 +173,40 @@ function normalizeCheck(v){
 function unsetDevStatus(message='DEV_STATUS.json未設定'){
   return {phase:'状態未設定',checks:DEV_CHECKS.map(([key,label])=>({key,label,status:'none'})),next:'',note:message,source:'unset'};
 }
+function errorDevStatus(message='DEV_STATUS.json取得失敗'){
+  return {phase:'状態取得失敗',checks:DEV_CHECKS.map(([key,label])=>({key,label,status:'none'})),next:'',note:message,source:'error'};
+}
 function explicitDevStatus(raw){
   if(!raw||typeof raw!=='object')return unsetDevStatus('DEV_STATUS.jsonを読み取れません');
   const phase=DEV_PHASES.includes(raw.phase)?raw.phase:'状態未設定';
   const src=raw.checks&&typeof raw.checks==='object'?raw.checks:{};
   return {phase,checks:DEV_CHECKS.map(([key,label])=>({key,label,status:normalizeCheck(src[key])})),next:String(raw.next||''),note:String(raw.note||''),updated_at:String(raw.updated_at||''),source:'explicit'};
 }
-async function loadDevStatus(repo,names){
-  if(!names.some(n=>n.toLowerCase()==='dev_status.json'))return unsetDevStatus();
+async function loadDevStatus(repo,names,root=[]){
+  const item=Array.isArray(root)?root.find(x=>String(x?.name||'').toLowerCase()==='dev_status.json'):null;
+  if(!item&&!names.some(n=>n.toLowerCase()==='dev_status.json'))return unsetDevStatus();
+  if(!repo.private&&item?.download_url){
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),5000);
+    try{
+      const r=await fetch(item.download_url,{signal:ctl.signal,cache:'no-store'});
+      if(!r.ok)throw new Error(`raw ${r.status}`);
+      return explicitDevStatus(JSON.parse(await r.text()));
+    }catch(e){
+      // Public repos normally use raw.githubusercontent.com so DEV_STATUS does not consume API quota.
+    }finally{clearTimeout(timer)}
+  }
   try{
     const f=await api(`https://api.github.com/repos/${OWNER}/${encodeURIComponent(repo.name)}/contents/DEV_STATUS.json?ref=${encodeURIComponent(repo.default_branch)}`);
     return explicitDevStatus(JSON.parse(decode64(f.content||'')));
-  }catch(e){return unsetDevStatus('DEV_STATUS.json読込失敗');}
+  }catch(e){return errorDevStatus(e?.message||'DEV_STATUS.json読込失敗');}
 }
 function maturityChipHTML(sc){const m=sc?.maturity;if(!m?.phase)return'';return `<span class="chip maturity-chip">${escapeHtml(m.phase)}</span>`}
 function qualityIcon(status){return status==='ok'?'✅':status==='warn'?'⚠️':status==='na'?'対象外':'—'}
 function reviewPriority(sc){const m=sc?.maturity;if(m?.source!=='explicit')return {level:0,count:0,critical:0,normal:0};const warns=(m.checks||[]).filter(x=>x.status==='warn');const critical=warns.filter(x=>x.key==='boot'||x.key==='device').length;const normal=warns.length-critical;return {level:critical?2:normal?1:0,count:warns.length,critical,normal}}
 function attentionCount(sc){return reviewPriority(sc).count}
 function attentionBadgeHTML(sc){const p=reviewPriority(sc);if(!p.count)return'';return `<span class="attention-badge ${p.level===2?'critical':''}" title="${p.level===2?'最優先':'要確認'}">⚠️${p.count}</span>`}
-function qualityLineHTML(sc){const m=sc?.maturity;if(!m)return'';if(m.source!=='explicit')return `<div class="qualityline"><span class="quality-item">状態ファイル未設定</span></div>`;const shown=(m.checks||[]).slice(0,5);return `<div class="qualityline">${shown.map(x=>`<span class="quality-item">${escapeHtml(x.label)} ${qualityIcon(x.status)}</span>`).join('')}</div>`}
-function maturityBreakdownHTML(m){if(!m||m.source!=='explicit')return'<div class="maturity-note">このRepoにはDEV_STATUS.jsonがまだありません。推測でフェーズ判定はしません。</div>';const note=m.note?`<div class="maturity-note">${escapeHtml(m.note)}</div>`:'';return `<div class="maturity-note">✅ 確認済み　⚠️ 確認中 / 一部確認　— 未確認　対象外</div>${note}<div class="maturity-breakdown">${(m.checks||[]).map(x=>`<div class="maturity-row"><span>${escapeHtml(x.label)}</span><span class="quality-status ${x.status}">${qualityIcon(x.status)}</span></div>`).join('')}</div>`}
+function qualityLineHTML(sc){const m=sc?.maturity;if(!m)return'';if(m.source==='error')return `<div class="qualityline"><span class="quality-item">状態ファイル取得失敗</span></div>`;if(m.source!=='explicit')return `<div class="qualityline"><span class="quality-item">状態ファイル未設定</span></div>`;const shown=(m.checks||[]).slice(0,5);return `<div class="qualityline">${shown.map(x=>`<span class="quality-item">${escapeHtml(x.label)} ${qualityIcon(x.status)}</span>`).join('')}</div>`}
+function maturityBreakdownHTML(m){if(m?.source==='error')return `<div class="maturity-note">DEV_STATUS.jsonは存在しますが取得できませんでした。${escapeHtml(m.note||'')}</div>`;if(!m||m.source!=='explicit')return'<div class="maturity-note">このRepoにはDEV_STATUS.jsonがまだありません。推測でフェーズ判定はしません。</div>';const note=m.note?`<div class="maturity-note">${escapeHtml(m.note)}</div>`:'';return `<div class="maturity-note">✅ 確認済み　⚠️ 確認中 / 一部確認　— 未確認　対象外</div>${note}<div class="maturity-breakdown">${(m.checks||[]).map(x=>`<div class="maturity-row"><span>${escapeHtml(x.label)}</span><span class="quality-status ${x.status}">${qualityIcon(x.status)}</span></div>`).join('')}</div>`}
 async function scanRepo(repo){
   const k=rootKey(repo);
   if(cache[k]&&Date.now()-cache[k].at<12*3600*1000){state.scans[repo.name]=cache[k].data;render();return}
@@ -204,13 +218,13 @@ async function scanRepo(repo){
     let tech='other';
     if(lower.includes('project.godot'))tech='godot';
     else if(lower.includes('package.json')||lower.includes('index.html')||lower.some(x=>x.includes('manifest'))||lower.some(x=>x.includes('service-worker')))tech='web';
+    const maturity=await loadDevStatus(repo,names,root);
     let autoDesc=repo.description||'';
     if(names.some(n=>/^readme/i.test(n))&&(!autoDesc||!isJapanese(autoDesc))){try{const rd=await api(`https://api.github.com/repos/${OWNER}/${encodeURIComponent(repo.name)}/readme?ref=${encodeURIComponent(repo.default_branch)}`);const summary=readmeSummary(decode64(rd.content||''));if(summary&&(isJapanese(summary)||!autoDesc))autoDesc=summary}catch{}}
     let kind=inferKind(repo.name,tech,autoDesc),primary=pickPrimary(tech,names,dirs);
     if(tech==='other'||kind==='widget'||dirs.some(d=>/^(godot|game|web|app|src|payload)\/$/i.test(d))){try{const tree=await api(`https://api.github.com/repos/${OWNER}/${encodeURIComponent(repo.name)}/git/trees/${encodeURIComponent(repo.default_branch)}?recursive=1`);const paths=(tree.tree||[]).filter(x=>x.type==='blob').map(x=>x.path);cache['tree|'+k]={at:Date.now(),data:{paths}};const nestedTech=techFromPaths(paths,kind,autoDesc);if(nestedTech!=='other')tech=nestedTech;kind=inferKind(repo.name,tech,autoDesc);const nestedPrimary=pickPrimaryFromPaths(tech,paths);if(nestedPrimary.length)primary=nestedPrimary}catch{}}
     if(tech==='other'&&kind==='widget')tech='scriptable';
     const role=inferRole(repo.name,kind,autoDesc);
-    const maturity=await loadDevStatus(repo,names);
     const data={tech,kind,role,primary:primary.slice(0,5),autoDesc,maturity};
     state.scans[repo.name]=data;cache[k]={at:Date.now(),data};saveJSON(LS_CACHE,cache);render();
   }catch(e){const kind=KIND_OVERRIDE[repo.name]||'other';state.scans[repo.name]={tech:kind==='widget'?'scriptable':'unknown',kind,role:inferRole(repo.name,kind,repo.description||''),primary:[],autoDesc:repo.description||'',maturity:unsetDevStatus('Repo情報を取得できません'),error:e.message};render()}
