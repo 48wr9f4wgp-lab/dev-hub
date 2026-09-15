@@ -1,0 +1,19 @@
+{
+  "name": "DEV HUB 開発司令塔",
+  "short_name": "DEV HUB",
+  "description": "GitHubの開発アプリを一覧・構成確認する個人用ダッシュボード",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1117",
+  "theme_color": "#0b1117",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
