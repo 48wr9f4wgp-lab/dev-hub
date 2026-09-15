@@ -61,3 +61,5 @@ function isImportantPath(p,tech){if(/^\.github\//i.test(p)||/^(README|LICENSE|CH
           git add index.html
           git commit -m "feat: prioritize meaningful project structure"
           git push
+
+# trigger: 2
