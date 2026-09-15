@@ -1,0 +1,66 @@
+name: Apply DEV HUB polish
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-devhub-polish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch dashboard
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+
+          s=s.replace('.name{font-size:16px;font-weight:850;overflow-wrap:anywhere}', '.name{font-size:16px;font-weight:850;overflow-wrap:anywhere}.repoid{font-size:9px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:56vw}.pinned-wrap[hidden]{display:none}.pinned-wrap{margin-top:10px}.pinned-wrap .sectionhead{margin-top:0}.pinned-wrap .cards{margin-bottom:10px}')
+
+          old='''  <div class="sectionhead"><h2>アプリ一覧</h2><span class="count" id="resultCount"></span></div>\n  <div id="message" class="loading"><span class="spinner"></span><br>GitHubから読み込み中…</div>\n  <section class="cards" id="cards"></section>'''
+          new='''  <section class="pinned-wrap" id="pinnedWrap" hidden>\n    <div class="sectionhead"><h2>ピン留め</h2><span class="count" id="pinnedCount"></span></div>\n    <section class="cards" id="pinnedCards"></section>\n  </section>\n  <div class="sectionhead"><h2 id="mainListTitle">アプリ一覧</h2><span class="count" id="resultCount"></span></div>\n  <div id="message" class="loading"><span class="spinner"></span><br>GitHubから読み込み中…</div>\n  <section class="cards" id="cards"></section>'''
+          if old in s:s=s.replace(old,new)
+
+          s=s.replace("const LS_META='devhub.meta.v2', LS_TOKEN='devhub.token.v1', LS_CACHE='devhub.cache.v3';", "const LS_META='devhub.meta.v2', LS_TOKEN='devhub.token.v1', LS_CACHE='devhub.cache.v4';")
+          s=s.replace("const $=s=>document.querySelector(s);const cards=$('#cards'),msg=$('#message');", "const $=s=>document.querySelector(s);const cards=$('#cards'),pinnedCards=$('#pinnedCards'),msg=$('#message');")
+
+          insert='''const DISPLAY_NAME={\n  'fish-target':'Fish Target','dev-hub':'DEV HUB','Logistics-Boss':'Logistics Boss',\n  '-scrap-planet-qa':'SCRAP PLANET QA','farm-loop':'Farm Loop','-velvet-pwa':'Velvet PWA',\n  'combat-hub':'Combat Hub','tackle-fit':'Tackle Fit','-grid-bloom':'GRID BLOOM',\n  'motorsport-hub':'Motorsport Hub','club-pulse':'Club Pulse','machi-loop':'MACHI LOOP',\n  'tide-dash':'Tide Dash','48wr9f4wgp-lab-tide-dash':'Tide Dash QA'\n};\nfunction displayName(name){if(DISPLAY_NAME[name])return DISPLAY_NAME[name];return name.replace(/^[-_]+/,'').replace(/^48wr9f4wgp-lab[-_]/,'').split(/[-_]+/).filter(Boolean).map(w=>w.toUpperCase()===w?w:w.charAt(0).toUpperCase()+w.slice(1)).join(' ')||name}\n'''
+          if 'const DISPLAY_NAME=' not in s:s=s.replace('const KIND_OVERRIDE={',insert+'const KIND_OVERRIDE={')
+
+          old_func="function readmeSummary(md){if(!md)return'';const candidates=[];const lines=md.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);for(const line of lines){if(/^#|^!\\[|^\\[!\\[|^<|^---|^```/.test(line))continue;const clean=line.replace(/\\[([^\\]]+)\\]\\([^\\)]+\\)/g,'$1').replace(/[*_`>#]/g,'').trim();if(clean.length>=12)candidates.push(clean.slice(0,120))}return candidates.find(isJapanese)||candidates[0]||''}"
+          new_func="function readmeSummary(md){if(!md)return'';const text=md.replace(/```[\\s\\S]*?```/g,' ').replace(/<!--([\\s\\S]*?)-->/g,' ');const lines=text.split(/\\r?\\n/);let section='',buf=[],items=[];const push=()=>{const raw=buf.join(' ').replace(/\\s+/g,' ').trim();buf=[];if(!raw)return;const clean=raw.replace(/!\\[[^\\]]*\\]\\([^\\)]+\\)/g,'').replace(/\\[([^\\]]+)\\]\\([^\\)]+\\)/g,'$1').replace(/[*_`>#]/g,'').trim();if(clean.length<16)return;items.push({text:clean.slice(0,160),section})};for(const raw of lines){const line=raw.trim();if(!line){push();continue}const h=line.match(/^#{1,4}\\s+(.+)/);if(h){push();section=h[1].trim();continue}if(/^[-*+]\\s+|^\\d+[.)]\\s+|^\\||^!\\[|^\\[!\\[|^<|^---+$/.test(line)){push();continue}buf.push(line)}push();const score=x=>{let n=0;const t=x.text,sec=x.section||'';if(isJapanese(t))n+=80;if(/概要|overview|about|description|目的|summary/i.test(sec))n+=45;if(/[。.!！?？]$/.test(t))n+=8;if(t.length>=24&&t.length<=120)n+=12;if(/->|→|\\btest\\b|\\bbuild\\b|\\bcommand\\b|^Target:/i.test(t))n-=25;if((t.match(/[:：]/g)||[]).length>=2)n-=12;return n};items.sort((a,b)=>score(b)-score(a));return items[0]?.text||''}"
+          if old_func in s:s=s.replace(old_func,new_func)
+
+          s=s.replace("function displayDesc(r,sc){const m=getMeta(r.name);if(m.description)return m.description;if(isJapanese(sc.autoDesc))return sc.autoDesc;if(JP_FALLBACK[r.name])return JP_FALLBACK[r.name];return sc.autoDesc||''}", "function displayDesc(r,sc){const m=getMeta(r.name);if(m.description)return m.description;if(JP_FALLBACK[r.name])return JP_FALLBACK[r.name];if(isJapanese(sc.autoDesc))return sc.autoDesc;return sc.autoDesc||''}")
+
+          old_card="function cardHTML(r){const m=getMeta(r.name),sc=state.scans[r.name]||{tech:'unknown',kind:KIND_OVERRIDE[r.name]||'other',primary:[],autoDesc:r.description||''};const desc=displayDesc(r,sc);const visChip=r.private?'<span class=\"chip private\">非公開</span>':'';const statusChip=m.status!=='not-started'?`<span class=\"chip ${chipClassStatus(m.status)}\">${statusLabels[m.status]}</span>`:'';const k=kindLabels[sc.kind]||'その他',ts=techShort(sc.tech);const typeText=ts?`${k} · ${ts}`:k;return `<article class=\"card ${m.pinned?'pinned':''}\" data-repo=\"${escapeHtml(r.name)}\"><div class=\"cardtop\"><div class=\"name mono\">${escapeHtml(r.name)}</div><div class=\"cardmeta\"><span class=\"updated\">${ago(r.pushed_at||r.updated_at)}</span><button class=\"pinbtn ${m.pinned?'on':''}\" data-pin=\"${escapeHtml(r.name)}\" aria-label=\"${m.pinned?'ピンを外す':'ピン留め'}\">${m.pinned?'★':'☆'}</button></div></div><div class=\"desc ${desc?'':'missing'}\">${escapeHtml(desc||'説明未設定 — タップして追加')}</div><div class=\"chips\"><span class=\"chip ${sc.kind}\">${escapeHtml(typeText)}</span>${visChip}${statusChip}</div><div class=\"structure\"><span class=\"kicker\">構成</span><span class=\"paths mono\">${escapeHtml(compactPrimary(sc))}</span></div>${m.next?`<div class=\"nextline\"><b>次：</b>${escapeHtml(m.next)}</div>`:''}</article>`}"
+          new_card="function cardHTML(r){const m=getMeta(r.name),sc=state.scans[r.name]||{tech:'unknown',kind:KIND_OVERRIDE[r.name]||'other',primary:[],autoDesc:r.description||''};const desc=displayDesc(r,sc);const visChip=r.private?'<span class=\"chip private\">非公開</span>':'';const statusChip=m.status!=='not-started'?`<span class=\"chip ${chipClassStatus(m.status)}\">${statusLabels[m.status]}</span>`:'';const k=kindLabels[sc.kind]||'その他',ts=techShort(sc.tech);const typeText=ts?`${k} · ${ts}`:k;return `<article class=\"card ${m.pinned?'pinned':''}\" data-repo=\"${escapeHtml(r.name)}\"><div class=\"cardtop\"><div><div class=\"name\">${escapeHtml(displayName(r.name))}</div><div class=\"repoid mono\">${escapeHtml(r.name)}</div></div><div class=\"cardmeta\"><span class=\"updated\">${ago(r.pushed_at||r.updated_at)}</span><button class=\"pinbtn ${m.pinned?'on':''}\" data-pin=\"${escapeHtml(r.name)}\" aria-label=\"${m.pinned?'ピンを外す':'ピン留め'}\">${m.pinned?'★':'☆'}</button></div></div><div class=\"desc ${desc?'':'missing'}\">${escapeHtml(desc||'説明未設定 — タップして追加')}</div><div class=\"chips\"><span class=\"chip ${sc.kind}\">${escapeHtml(typeText)}</span>${visChip}${statusChip}</div><div class=\"structure\"><span class=\"kicker\">構成</span><span class=\"paths mono\">${escapeHtml(compactPrimary(sc))}</span></div>${m.next?`<div class=\"nextline\"><b>次：</b>${escapeHtml(m.next)}</div>`:''}</article>`}"
+          if old_card in s:s=s.replace(old_card,new_card)
+
+          old_render="function render(){stats();const rs=filtered();$('#resultCount').textContent=`${rs.length}件`;cards.innerHTML=rs.map(cardHTML).join('');if(!rs.length&&state.repos.length)cards.innerHTML='<div class=\"empty\">条件に合うアプリはありません。</div>';cards.querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>openRepo(el.dataset.repo)));cards.querySelectorAll('.pinbtn').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();togglePin(b.dataset.pin)}));updateFilterUI()}"
+          new_render="function bindCardEvents(root){root.querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>openRepo(el.dataset.repo)));root.querySelectorAll('.pinbtn').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();togglePin(b.dataset.pin)}))}\nfunction render(){stats();const rs=filtered(),pinned=rs.filter(r=>getMeta(r.name).pinned),rest=rs.filter(r=>!getMeta(r.name).pinned);const wrap=$('#pinnedWrap');wrap.hidden=!pinned.length;$('#pinnedCount').textContent=pinned.length?`${pinned.length}件`:'';pinnedCards.innerHTML=pinned.map(cardHTML).join('');$('#mainListTitle').textContent=pinned.length?'その他のアプリ':'アプリ一覧';$('#resultCount').textContent=`${rs.length}件`;cards.innerHTML=rest.map(cardHTML).join('');if(!rs.length&&state.repos.length)cards.innerHTML='<div class=\"empty\">条件に合うアプリはありません。</div>';bindCardEvents(cards);bindCardEvents(pinnedCards);updateFilterUI()}"
+          if old_render in s:s=s.replace(old_render,new_render)
+
+          s=s.replace('<h2 class="mono" style="margin:5px 0 8px;font-size:22px">${escapeHtml(name)}</h2>', '<h2 style="margin:5px 0 2px;font-size:22px">${escapeHtml(displayName(name))}</h2><div class="repoid mono" style="max-width:none;margin-bottom:8px">${escapeHtml(name)}</div>')
+
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- index.html; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git add index.html
+          git commit -m "ui: polish summaries, names and pinned section"
+          git push
