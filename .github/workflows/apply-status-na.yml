@@ -1,0 +1,36 @@
+name: Apply status applicability
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'trigger status-applicability'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch
+        run: python .github/scripts/apply_status_na.py
+      - name: Verify JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text()
+          m=re.search(r'<script>([\s\S]*?)</script>', s)
+          if not m: raise SystemExit('script block not found')
+          Path('/tmp/devhub.js').write_text(m.group(1))
+          PY
+          node --check /tmp/devhub.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "feat: support non-applicable development checks"
+          git push
