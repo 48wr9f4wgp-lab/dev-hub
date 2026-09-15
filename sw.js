@@ -1,4 +1,4 @@
-const CACHE='devhub-shell-v3';
+const CACHE='devhub-shell-v4';
 const API_CACHE='devhub-api-v1';
 const OWNER='48wr9f4wgp-lab';
 const SHELL=['./','./index.html','./manifest.webmanifest','./icon.svg'];
@@ -74,10 +74,24 @@ self.addEventListener('install',event=>{
 });
 
 self.addEventListener('activate',event=>{
-  event.waitUntil(
-    caches.keys().then(keys=>Promise.all(keys.filter(k=>![CACHE,API_CACHE].includes(k)).map(k=>caches.delete(k))))
-  );
-  self.clients.claim();
+  event.waitUntil((async()=>{
+    const keys=await caches.keys();
+    await Promise.all(keys.filter(k=>![CACHE,API_CACHE].includes(k)).map(k=>caches.delete(k)));
+    await self.clients.claim();
+
+    // 新しいService Workerが有効になった直後、旧Workerで表示された「確認中」状態を
+    // 1回だけ自動再読込して最新の取得ロジックへ切り替える。
+    const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    await Promise.all(clients.map(client=>{
+      try{
+        const url=new URL(client.url);
+        if(url.origin===self.location.origin&&url.pathname.startsWith(new URL(self.registration.scope).pathname)){
+          return client.navigate(client.url);
+        }
+      }catch{}
+      return Promise.resolve();
+    }));
+  })());
 });
 
 self.addEventListener('fetch',event=>{
