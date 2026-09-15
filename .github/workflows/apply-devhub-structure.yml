@@ -20,34 +20,27 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('index.html')
-          s=p.read_text()
-
-          s=s.replace("LS_CACHE='devhub.cache.v5'", "LS_CACHE='devhub.cache.v6'")
-
-          marker="function rootKey(repo){return `${repo.name}|${repo.pushed_at||repo.updated_at}`}\n"
-          helper=r'''function pickPrimary(tech,names,dirs){const exists=x=>x.endsWith('/')?dirs.includes(x):names.includes(x);const order=tech==='godot'?['main.tscn','project.godot','scenes/','scripts/','assets/','addons/','web/','tests/','docs/']:tech==='web'?['index.html','src/','app/','components/','public/','scripts/','data/','assets/','styles/','manifest.webmanifest','manifest.json','package.json']:['src/','app/','scripts/','payload/','data/','public/','assets/','components/','lib/','server/','client/','tests/','test/','config/'];const out=[];for(const x of order)if(exists(x)&&!out.includes(x))out.push(x);if(tech==='other'&&!out.length){for(const d of dirs){if(/^(\.github|docs?|\.vscode|\.idea|node_modules)\/$/i.test(d))continue;out.push(d)}for(const f of names){if(/\.(gd|js|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h)$/i.test(f))out.push(f)}}return [...new Set(out)].slice(0,5)}
-function isImportantPath(p,tech){if(/^\.github\//i.test(p)||/^(README|LICENSE|CHANGELOG)(\.|$)/i.test(p))return false;if(tech==='godot')return /\.tscn$|\.gd$|^assets\/|^scenes\/|^scripts\/|^addons\/|^web\/|^tests\/|project\.godot|export_presets/i.test(p);if(tech==='web')return /\.html$|\.(js|ts|tsx|jsx|css)$|manifest|service.worker|package\.json|^src\/|^app\/|^components\/|^public\/|^scripts\/|^data\//i.test(p);return /^(src|app|scripts|payload|data|public|assets|components|lib|server|client|tests?|config|docs)\//i.test(p)||/\.(js|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|json|ya?ml)$/i.test(p)}
-'''
+          p = Path('index.html')
+          s = p.read_text()
+          s = s.replace("LS_CACHE='devhub.cache.v5'", "LS_CACHE='devhub.cache.v6'")
+          marker = "function rootKey(repo){return `${repo.name}|${repo.pushed_at||repo.updated_at}`}\n"
+          helper = "function pickPrimary(tech,names,dirs){const exists=x=>x.endsWith('/')?dirs.includes(x):names.includes(x);const order=tech==='godot'?['main.tscn','project.godot','scenes/','scripts/','assets/','addons/','web/','tests/','docs/']:tech==='web'?['index.html','src/','app/','components/','public/','scripts/','data/','assets/','styles/','manifest.webmanifest','manifest.json','package.json']:['src/','app/','scripts/','payload/','data/','public/','assets/','components/','lib/','server/','client/','tests/','test/','config/'];const out=[];for(const x of order)if(exists(x)&&!out.includes(x))out.push(x);if(tech==='other'&&!out.length){for(const d of dirs){if(/^(\\.github|docs?|\\.vscode|\\.idea|node_modules)\\/$/i.test(d))continue;out.push(d)}for(const f of names){if(/\\.(gd|js|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h)$/i.test(f))out.push(f)}}return [...new Set(out)].slice(0,5)}\nfunction isImportantPath(p,tech){if(/^\\.github\\//i.test(p)||/^(README|LICENSE|CHANGELOG)(\\.|$)/i.test(p))return false;if(tech==='godot')return /\\.tscn$|\\.gd$|^assets\\/|^scenes\\/|^scripts\\/|^addons\\/|^web\\/|^tests\\/|project\\.godot|export_presets/i.test(p);if(tech==='web')return /\\.html$|\\.(js|ts|tsx|jsx|css)$|manifest|service.worker|package\\.json|^src\\/|^app\\/|^components\\/|^public\\/|^scripts\\/|^data\\//i.test(p);return /^(src|app|scripts|payload|data|public|assets|components|lib|server|client|tests?|config|docs)\\//i.test(p)||/\\.(js|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h|json|ya?ml)$/i.test(p)}\n"
           if 'function pickPrimary(' not in s:
-            s=s.replace(marker, marker+helper)
-
-          old="let primary=[];if(tech==='godot'){for(const x of ['main.tscn','project.godot','scripts/','scenes/','assets/','docs/','tests/','addons/','web/'])if(names.includes(x.replace('/',''))||dirs.includes(x))primary.push(x)}else if(tech==='web'){for(const x of ['index.html','src/','app/','public/','components/','styles/','manifest.webmanifest','manifest.json','package.json','.github/'])if(names.includes(x.replace('/',''))||dirs.includes(x))primary.push(x)}else primary=[...dirs.slice(0,4),...names.filter(x=>/^readme|package\\.json/i.test(x)).slice(0,1)];let autoDesc=repo.description||'';"
-          new="const primary=pickPrimary(tech,names,dirs);let autoDesc=repo.description||'';"
+              s = s.replace(marker, marker + helper)
+          old = "let primary=[];if(tech==='godot'){for(const x of ['main.tscn','project.godot','scripts/','scenes/','assets/','docs/','tests/','addons/','web/'])if(names.includes(x.replace('/',''))||dirs.includes(x))primary.push(x)}else if(tech==='web'){for(const x of ['index.html','src/','app/','public/','components/','styles/','manifest.webmanifest','manifest.json','package.json','.github/'])if(names.includes(x.replace('/',''))||dirs.includes(x))primary.push(x)}else primary=[...dirs.slice(0,4),...names.filter(x=>/^readme|package\\.json/i.test(x)).slice(0,1)];let autoDesc=repo.description||'';"
+          new = "const primary=pickPrimary(tech,names,dirs);let autoDesc=repo.description||'';"
           if old not in s:
-            raise SystemExit('primary selection block not found')
-          s=s.replace(old,new)
-
-          old_stats="const vals=[['アプリ',rs.length],['ピン',rs.filter(r=>getMeta(r.name).pinned).length],['開発中',rs.filter(r=>getMeta(r.name).status==='development').length],['完了',rs.filter(r=>getMeta(r.name).status==='complete').length]];"
-          new_stats="const sevenDays=Date.now()-7*86400000;const vals=[['アプリ',rs.length],['ピン',rs.filter(r=>getMeta(r.name).pinned).length],['7日以内',rs.filter(r=>new Date(r.pushed_at||r.updated_at).getTime()>=sevenDays).length],['完了',rs.filter(r=>getMeta(r.name).status==='complete').length]];"
-          if old_stats in s:s=s.replace(old_stats,new_stats)
-
-          old_rel="const relevant=d.paths.filter(p=>sc.tech==='godot'?/\\.tscn$|\\.gd$|^assets\\/|^docs\\/|^tests\\/|project\\.godot|export_presets/i.test(p):sc.tech==='web'?/\\.html$|\\.(js|ts|tsx|css)$|manifest|service.worker|package\\.json|^src\\/|^public\\//i.test(p):true).slice(0,70);"
-          new_rel="const relevant=d.paths.filter(p=>isImportantPath(p,sc.tech)).slice(0,70);"
+              raise SystemExit('primary selection block not found')
+          s = s.replace(old, new)
+          old_stats = "const vals=[['アプリ',rs.length],['ピン',rs.filter(r=>getMeta(r.name).pinned).length],['開発中',rs.filter(r=>getMeta(r.name).status==='development').length],['完了',rs.filter(r=>getMeta(r.name).status==='complete').length]];"
+          new_stats = "const sevenDays=Date.now()-7*86400000;const vals=[['アプリ',rs.length],['ピン',rs.filter(r=>getMeta(r.name).pinned).length],['7日以内',rs.filter(r=>new Date(r.pushed_at||r.updated_at).getTime()>=sevenDays).length],['完了',rs.filter(r=>getMeta(r.name).status==='complete').length]];"
+          if old_stats in s:
+              s = s.replace(old_stats, new_stats)
+          old_rel = "const relevant=d.paths.filter(p=>sc.tech==='godot'?/\\.tscn$|\\.gd$|^assets\\/|^docs\\/|^tests\\/|project\\.godot|export_presets/i.test(p):sc.tech==='web'?/\\.html$|\\.(js|ts|tsx|css)$|manifest|service.worker|package\\.json|^src\\/|^public\\//i.test(p):true).slice(0,70);"
+          new_rel = "const relevant=d.paths.filter(p=>isImportantPath(p,sc.tech)).slice(0,70);"
           if old_rel not in s:
-            raise SystemExit('detail relevant filter block not found')
-          s=s.replace(old_rel,new_rel)
-
+              raise SystemExit('detail relevant filter block not found')
+          s = s.replace(old_rel, new_rel)
           p.write_text(s)
           PY
       - name: Commit patch
@@ -62,4 +55,4 @@ function isImportantPath(p,tech){if(/^\.github\//i.test(p)||/^(README|LICENSE|CH
           git commit -m "feat: prioritize meaningful project structure"
           git push
 
-# trigger: 2
+# trigger: valid-v1
