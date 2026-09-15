@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "phase": "品質確認",
+  "checks": {
+    "boot": "ok",
+    "test": "warn",
+    "device": "ok",
+    "save": "ok",
+    "analytics": "na",
+    "performance": "warn",
+    "release": "ok"
+  },
+  "next": "DEV_STATUS表示をiPhone実機で確認する",
+  "note": "GitHub Pages公開とiPhone表示は確認済み。自動テストと性能確認は一部のみ。",
+  "updated_at": "2026-09-15"
+}
