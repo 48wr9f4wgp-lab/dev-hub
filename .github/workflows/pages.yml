@@ -23,6 +23,42 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Validate DEV HUB
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          html = Path('index.html').read_text()
+          match = re.search(r'<script>([\s\S]*?)</script>', html)
+          if not match:
+              raise SystemExit('inline script block not found')
+          Path('/tmp/devhub.js').write_text(match.group(1))
+
+          status = json.loads(Path('DEV_STATUS.json').read_text())
+          phases = {
+              '企画確認中','企画確定','中核部分の試作','主要機能実装',
+              '見た目・操作感の改善','品質確認','公開前最終版','公開可能'
+          }
+          checks = {'boot','test','device','save','analytics','performance','release'}
+          values = {'ok','warn','none','na'}
+
+          if status.get('schema') != 1:
+              raise SystemExit('DEV_STATUS schema must be 1')
+          if status.get('phase') not in phases:
+              raise SystemExit('invalid DEV_STATUS phase')
+          actual_checks = status.get('checks') or {}
+          if set(actual_checks) != checks:
+              raise SystemExit('DEV_STATUS checks are missing or unexpected')
+          bad = {k:v for k,v in actual_checks.items() if v not in values}
+          if bad:
+              raise SystemExit(f'invalid DEV_STATUS check values: {bad}')
+          if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(status.get('updated_at',''))):
+              raise SystemExit('DEV_STATUS updated_at must be YYYY-MM-DD')
+          PY
+          node --check /tmp/devhub.js
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
