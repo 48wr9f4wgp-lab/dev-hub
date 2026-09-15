@@ -85,7 +85,7 @@
 
 <script>
 const OWNER='48wr9f4wgp-lab';
-const LS_META='devhub.meta.v2', LS_TOKEN='devhub.token.v1', LS_CACHE='devhub.cache.v7';
+const LS_META='devhub.meta.v2', LS_TOKEN='devhub.token.v1', LS_CACHE='devhub.cache.v7', LS_REPOS='devhub.repos.v1';
 const state={repos:[],scans:{},role:'all',kind:'all',tech:'all',status:'all',vis:'all',q:'',active:null};
 const $=s=>document.querySelector(s);const cards=$('#cards'),supportCards=$('#supportCards'),pinnedCards=$('#pinnedCards'),msg=$('#message');
 const statusLabels={'not-started':'未着手','development':'開発中','hold':'保留','complete':'完了'};
@@ -128,12 +128,12 @@ const ROLE_OVERRIDE={
 const escapeHtml=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const loadJSON=(k,fallback)=>{try{return JSON.parse(localStorage.getItem(k)||'')||fallback}catch{return fallback}};
 const saveJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let meta=loadJSON(LS_META,{}),cache=loadJSON(LS_CACHE,{});
+let meta=loadJSON(LS_META,{}),cache=loadJSON(LS_CACHE,{}),repoCache=loadJSON(LS_REPOS,[]);
 const getMeta=name=>Object.assign({description:'',status:'not-started',progress:0,objective:'',next:'',memo:'',pinned:false},meta[name]||{});
 function setMeta(name,patch){meta[name]=Object.assign(getMeta(name),patch);saveJSON(LS_META,meta);render();if(state.active===name)renderDetail(name,false)}
 function togglePin(name){setMeta(name,{pinned:!getMeta(name).pinned})}
 function headers(){const h={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};const t=localStorage.getItem(LS_TOKEN);if(t)h.Authorization=`Bearer ${t}`;return h}
-async function api(url){const r=await fetch(url,{headers:headers()});if(!r.ok){let m=`GitHub API ${r.status}`;try{const j=await r.json();m=j.message||m}catch{}throw new Error(m)}return r.json()}
+async function api(url,timeoutMs=8000){const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),timeoutMs);try{const r=await fetch(url,{headers:headers(),signal:ctl.signal,cache:'no-store'});if(!r.ok){let m=`GitHub API ${r.status}`;try{const j=await r.json();m=j.message||m}catch{}throw new Error(m)}return await r.json()}catch(e){if(e?.name==='AbortError')throw new Error('GitHub応答タイムアウト');throw e}finally{clearTimeout(timer)}}
 function ago(iso){if(!iso)return'更新日不明';const d=Math.floor((Date.now()-new Date(iso))/86400000);if(d<1)return'今日更新';if(d<30)return`${d}日前`;if(d<365)return`${Math.floor(d/30)}か月前`;return`${Math.floor(d/365)}年前`}
 function decode64(s){try{return decodeURIComponent(escape(atob(s.replace(/\n/g,''))))}catch{return''}}
 function isJapanese(s){return /[ぁ-んァ-ヶ一-龠々ー]/.test(s||'')}
@@ -141,7 +141,7 @@ function readmeSummary(md){if(!md)return'';const text=md.replace(/```[\s\S]*?```
 function inferKind(name,tech,desc=''){if(KIND_OVERRIDE[name])return KIND_OVERRIDE[name];const t=`${name} ${desc}`.toLowerCase();if(/\bqa\b|hosting|public build|verified build/.test(t))return'qa';if(/widget|scriptable/.test(t))return'widget';if(tech==='godot'||/game|simulator|simulation|puzzle/.test(t))return'game';if(/platform|framework|common base|基盤/.test(t))return'platform';if(tech==='web')return'tool';return'other'}
 function inferRole(name,kind,desc=''){if(ROLE_OVERRIDE[name])return ROLE_OVERRIDE[name];const t=`${name} ${desc}`.toLowerCase();if(kind==='qa'||kind==='platform'||/\bqa\b|hosting|host repo|public build|verified build|distribution|deploy|common base|framework|基盤/.test(t))return'support';return'product'}
 function displayDesc(r,sc){const m=getMeta(r.name);if(m.description)return m.description;if(JP_FALLBACK[r.name])return JP_FALLBACK[r.name];if(isJapanese(sc.autoDesc))return sc.autoDesc;return sc.autoDesc||''}
-async function loadRepos(){msg.className='loading';msg.innerHTML='<span class="spinner"></span><br>GitHubから読み込み中…';cards.innerHTML='';try{const token=localStorage.getItem(LS_TOKEN);let repos;if(token){const all=await api('https://api.github.com/user/repos?per_page=100&sort=pushed&affiliation=owner');repos=all.filter(r=>r.owner?.login===OWNER)}else{repos=await api(`https://api.github.com/users/${OWNER}/repos?per_page=100&sort=pushed&type=owner`)}state.repos=repos.filter(r=>!r.archived);msg.style.display='none';render();queueScans()}catch(e){msg.style.display='block';msg.className='error';msg.textContent='読み込み失敗: '+e.message}}
+async function loadRepos(){msg.className='loading';msg.innerHTML='<span class="spinner"></span><br>GitHubから読み込み中…';cards.innerHTML='';const cached=Array.isArray(repoCache)?repoCache.filter(r=>r&&!r.archived):[];if(cached.length){state.repos=cached;for(const r of cached){const c=cache[rootKey(r)];if(c?.data)state.scans[r.name]=c.data}msg.style.display='none';render()}try{const token=localStorage.getItem(LS_TOKEN);let repos;if(token){const all=await api('https://api.github.com/user/repos?per_page=100&sort=pushed&affiliation=owner',8000);repos=all.filter(r=>r.owner?.login===OWNER)}else{repos=await api(`https://api.github.com/users/${OWNER}/repos?per_page=100&sort=pushed&type=owner`,8000)}state.repos=repos.filter(r=>!r.archived);repoCache=state.repos;saveJSON(LS_REPOS,repoCache);msg.style.display='none';render();queueScans()}catch(e){if(cached.length){msg.style.display='none';return}msg.style.display='block';msg.className='error';msg.textContent='読み込み失敗: '+e.message}}
 function rootKey(repo){return `${repo.name}|${repo.pushed_at||repo.updated_at}`}
 function pickPrimary(tech,names,dirs){const exists=x=>x.endsWith('/')?dirs.includes(x):names.includes(x);const order=tech==='godot'?['main.tscn','project.godot','scenes/','scripts/','assets/','addons/','web/','tests/','docs/']:tech==='web'?['index.html','src/','app/','components/','public/','scripts/','data/','assets/','styles/','manifest.webmanifest','manifest.json','package.json']:['src/','app/','scripts/','payload/','data/','public/','assets/','components/','lib/','server/','client/','tests/','test/','config/'];const out=[];for(const x of order)if(exists(x)&&!out.includes(x))out.push(x);if(tech==='other'&&!out.length){for(const d of dirs){if(/^(\.github|docs?|\.vscode|\.idea|node_modules)\/$/i.test(d))continue;out.push(d)}for(const f of names){if(/\.(gd|js|ts|tsx|jsx|py|go|rs|java|kt|swift|cs|cpp|c|h)$/i.test(f))out.push(f)}}return [...new Set(out)].slice(0,5)}
 function techFromPaths(paths,kindHint='other',desc=''){
@@ -182,7 +182,7 @@ function structureSummary(sc){
   }else if(sc.tech==='web'){
     add('Web');
     if(has(/(^|\/)(src|app|components|public)\/?$|index\.html$/))add('UI');
-    if(has(/(^|\/)scripts\/?$|\.(js|ts|tsx|jsx)$/|package\.json$/))add('スクリプト');
+    if(has(/(^|\/)scripts\/?$|\.(js|ts|tsx|jsx)$|package\.json$/))add('スクリプト');
     if(has(/manifest\.(webmanifest|json)$|service-worker/))add('PWA');
     if(has(/(^|\/)data\/?$/))add('データ');
   }else if(sc.tech==='scriptable'){
