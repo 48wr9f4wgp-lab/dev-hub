@@ -1,0 +1,39 @@
+name: Apply scan resilience fix
+on:
+  push:
+    paths:
+      - '.github/scan-resilience.trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch DEV HUB
+        run: python .github/scripts/fix_scan_resilience.py
+      - name: Verify inline JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text()
+          js=s.rsplit('<script>',1)[1].split('</script>',1)[0]
+          Path('/tmp/devhub-inline.js').write_text(js)
+          PY
+          node --check /tmp/devhub-inline.js
+      - name: Verify resilience markers
+        run: |
+          grep -q "devhub.cache.v14" index.html
+          grep -q "raw.githubusercontent.com" index.html
+          grep -q "cachedScanFor" index.html
+          grep -q "scanQueueRunning" index.html
+      - name: Commit patch and self-clean
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git rm -f .github/scripts/fix_scan_resilience.py .github/workflows/apply-scan-resilience.yml .github/scan-resilience.trigger
+          git commit -m 'fix: keep DEV HUB status and tech visible during API failures'
+          git push
