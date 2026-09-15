@@ -66,3 +66,5 @@ function editorHTML(name,m,autoDesc){return `<details class="panel manage"><summ
           git add index.html
           git commit -m "feat: finish DEV HUB project detail view"
           git push
+
+# trigger: 2
