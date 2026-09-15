@@ -1,0 +1,75 @@
+name: One-shot status freshness guard
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'feat: add status freshness guard'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch DEV HUB
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          p=Path('index.html')
+          s=p.read_text()
+
+          s=s.replace("LS_CACHE='devhub.cache.v10'", "LS_CACHE='devhub.cache.v11'", 1)
+
+          old_css=".maturity-chip{border-color:#0e7490;color:#a5f3fc;background:#083344}.qualityline"
+          new_css=".maturity-chip{border-color:#0e7490;color:#a5f3fc;background:#083344}.chip.stale{border-color:#b45309;color:#fde68a;background:#451a03}.qualityline"
+          if old_css not in s:
+              raise SystemExit('CSS anchor not found')
+          s=s.replace(old_css,new_css,1)
+
+          old_fn='''function maturityChipHTML(sc){const m=sc?.maturity;if(!m?.phase)return'';return `<span class="chip maturity-chip">${escapeHtml(m.phase)}</span>`}'''
+          new_fn='''function statusFreshness(repo,m){if(!repo||m?.source!=='explicit'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(m.updated_at||''))return'unknown';const repoDay=String(repo.pushed_at||repo.updated_at||'').slice(0,10);if(!repoDay)return'unknown';return repoDay>m.updated_at?'stale':'current'}\nfunction maturityChipHTML(sc,repo){const m=sc?.maturity;if(!m?.phase)return'';const stale=statusFreshness(repo,m)==='stale'?`<span class="chip stale">状態要更新</span>`:'';return `<span class="chip maturity-chip">${escapeHtml(m.phase)}</span>${stale}`}'''
+          if old_fn not in s:
+              raise SystemExit('maturityChipHTML anchor not found')
+          s=s.replace(old_fn,new_fn,1)
+
+          old_call='${visChip}${statusChip}${maturityChipHTML(sc)}'
+          new_call='${visChip}${statusChip}${maturityChipHTML(sc,r)}'
+          if old_call not in s:
+              raise SystemExit('card maturity call anchor not found')
+          s=s.replace(old_call,new_call,1)
+
+          p.write_text(s)
+
+          sp=Path('DEV_STATUS.json')
+          data=json.loads(sp.read_text())
+          data['next']='状態鮮度警告をiPhone実機で確認する'
+          data['note']='GitHub Pages公開・DEV_STATUS正本化・状態鮮度警告まで実装。自動テストと性能確認は一部のみ。'
+          data['updated_at']='2026-09-15'
+          sp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          PY
+      - name: Verify inline JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text()
+          m=re.search(r'<script>([\s\S]*?)</script>',s)
+          if not m:
+              raise SystemExit('script block not found')
+          Path('/tmp/devhub.js').write_text(m.group(1))
+          PY
+          node --check /tmp/devhub.js
+      - name: Remove one-shot workflow and commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-shot-status-freshness.yml
+          git add index.html DEV_STATUS.json
+          git commit -m "feat: flag stale development status"
+          git push
