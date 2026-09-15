@@ -184,7 +184,7 @@ function maturityFromPaths(paths,tech,kind,role,desc=''){
   const perf=has(/performance|perf[_-]|benchmark|profil|fps|memory[_-]?test|load[_-]?test/);
   const release=tech==='godot'?has(/export_presets\.cfg|(^|\/)(build|dist|release|web)(\/|\.)/):has(/manifest\.(webmanifest|json)$|service-worker|(^|\/)(dist|build|release)(\/|\.)|pages\.ya?ml|deploy/);
   const releaseReady=has(/release[_-]?ready|qa[_-]?pass|rc[_-]?pass|release[_-]?checklist.*(done|pass)|公開可能/);
-  const status=(ok,warn=False)=>ok?'ok':warn?'warn':'none';
+  const status=(ok,warn=false)=>ok?'ok':warn?'warn':'none';
   const checks=[
     {key:'boot',label:'起動構成',status:status(entry,code>0),note:'起動に必要な構成が見つかるか'},
     {key:'test',label:'自動テスト',status:status(testStrong,workflow||testFiles),note:'テストと自動実行の証拠'},
@@ -213,7 +213,7 @@ function structureSummary(sc){
   const out=[];const add=x=>{if(x&&!out.includes(x))out.push(x)};
   const has=re=>ps.some(p=>re.test(p));
   if(sc.kind==='qa'){
-    add('QA配布');
+    add('品質確認用配布');
     if(has(/(^|\/)payload\/?$/))add('ペイロード');
     if(has(/index\.html|manifest|\.wasm$|\.pck$/))add('Webビルド');
   }else if(sc.tech==='godot'){
@@ -226,7 +226,7 @@ function structureSummary(sc){
     add('Web');
     if(has(/(^|\/)(src|app|components|public)\/?$|index\.html$/))add('UI');
     if(has(/(^|\/)scripts\/?$|\.(js|ts|tsx|jsx)$|package\.json$/))add('スクリプト');
-    if(has(/manifest\.(webmanifest|json)$|service-worker/))add('PWA');
+    if(has(/manifest\.(webmanifest|json)$|service-worker/))add('ホーム画面対応');
     if(has(/(^|\/)data\/?$/))add('データ');
   }else if(sc.tech==='scriptable'){
     add('Scriptable');
