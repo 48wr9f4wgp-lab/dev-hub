@@ -1,0 +1,48 @@
+name: Apply stale scan cache reset
+on:
+  push:
+    paths:
+      - '.github/cache-reset.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bump DEV HUB scan cache generation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text()
+          old = "LS_CACHE='devhub.cache.v13'"
+          new = "LS_CACHE='devhub.cache.v14'"
+          if old not in s:
+              raise SystemExit('expected cache generation not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Validate inline JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text()
+          m=re.search(r'<script>([\s\S]*?)</script>',s)
+          if not m:
+              raise SystemExit('inline script not found')
+          Path('/tmp/devhub-inline.js').write_text(m.group(1))
+          PY
+          node --check /tmp/devhub-inline.js
+      - name: Remove one-shot files and commit
+        run: |
+          rm -f .github/cache-reset.trigger .github/workflows/apply-cache-reset.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: invalidate stale dashboard scan cache'
+          git push
