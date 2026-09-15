@@ -1,0 +1,38 @@
+name: Apply status loading fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'trigger status loading fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch DEV HUB
+        run: python .github/scripts/fix_status_loading.py
+      - name: Verify inline JavaScript
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text()
+          m=re.search(r'<script>([\s\S]*?)</script>',s)
+          if not m:
+              raise SystemExit('script block not found')
+          Path('/tmp/devhub.js').write_text(m.group(1))
+          PY
+          node --check /tmp/devhub.js
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "fix: load repo status without exhausting GitHub API quota"
+          git push
