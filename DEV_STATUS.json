@@ -4,13 +4,13 @@
   "checks": {
     "boot": "ok",
     "test": "warn",
-    "device": "ok",
+    "device": "warn",
     "save": "ok",
     "analytics": "na",
     "performance": "warn",
     "release": "ok"
   },
-  "next": "DEV_STATUS表示とカード一覧をiPhone実機で回帰確認する",
-  "note": "GitHub Pages公開とiPhone表示は確認済み。Pages公開前にJavaScript構文とDEV_STATUSスキーマを自動検証する。自動テストと性能確認は一部のみ。",
+  "next": "scan cache v14で全14Repoの技術・DEV_STATUS表示が復旧するかiPhone実機で回帰確認する",
+  "note": "GitHub Pages公開と起動は確認済み。旧scan cache v13が一部Repoの確認中表示を保持していたためv14へ無効化。JavaScript構文とDEV_STATUSスキーマは公開前CIで検証する。",
   "updated_at": "2026-09-15"
 }
