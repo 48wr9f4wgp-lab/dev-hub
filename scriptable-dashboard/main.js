@@ -2,7 +2,7 @@
 // Remote main for Scriptable loader.
 // IMPORTANT: Script.complete() は loader 側で呼ぶ。
 
-const VERSION = "1.8-github";
+const VERSION = "1.9-github";
 
 const USER = globalThis.ORE_DASH_CONFIG || {};
 
@@ -328,7 +328,7 @@ const taskCard=mkCard(row1);taskCard.size=new Size(151,86);section(taskCard,"che
 if(!tasksData.ok){t=taskCard.addText("取得失敗");t.font=Font.systemFont(9);t.textColor=C.red;}
 else if(!tasksData.items.length){t=taskCard.addText("今日のタスクなし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else tasksData.items.forEach((r,i)=>{const l=taskCard.addStack();l.centerAlignContent();icon(l,"circle",r.isOverdue?C.red:C.green,8);l.addSpacer(5);const x=l.addText(shorten(r.title,16));x.font=Font.systemFont(9);x.textColor=C.text;x.lineLimit=1;if(i<tasksData.items.length-1)taskCard.addSpacer(3);});
-w.addSpacer(5);
+w.addSpacer(4);
 
 // ROW2
 const row2=w.addStack();row2.spacing=8;
@@ -345,7 +345,7 @@ const uni=mkCard(row2);uni.size=new Size(217,90);const uh=section(uni,"graduatio
 t=uh.addText((universityData.reminderOK||universityData.calendarOK)?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=(universityData.reminderOK||universityData.calendarOK)?C.green:C.red;uni.addSpacer(4);
 if(!universityData.items.length){t=uni.addText("検出イベントなし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else universityData.items.forEach((it,i)=>{const l=uni.addStack();l.centerAlignContent();let x=l.addText(it.kind);x.font=Font.boldSystemFont(8);x.textColor=it.color;l.addSpacer(4);x=l.addText(relativeDay(it.date));x.font=Font.boldSystemFont(9);x.textColor=it.color;l.addSpacer(4);x=l.addText(fmtDate(it.date));x.font=Font.systemFont(8);x.textColor=C.sub;l.addSpacer(4);x=l.addText(shorten(it.title,11));x.font=Font.systemFont(8);x.textColor=C.text;x.lineLimit=1;if(i<universityData.items.length-1)uni.addSpacer(3);});
-w.addSpacer(5);
+w.addSpacer(4);
 
 // ROW3 lifestyle
 const lifeCard=mkCard(w);lifeCard.setPadding(6,9,6,9);const lh=section(lifeCard,"leaf.fill","暮らし・趣味",C.green);lh.addSpacer();
@@ -360,14 +360,14 @@ function lifeCol(cat,item,extra){
   if(extra){x=c.addText(extra);x.font=Font.systemFont(7);x.textColor=C.gray;}
 }
 lifeCol(LIFESTYLE.fishing,life.fishing,"潮汐 未接続");lifeCol(LIFESTYLE.garden,life.garden);lifeCol(LIFESTYLE.workout,life.workout);
-w.addSpacer(5);
+w.addSpacer(4);
 
 // ROW4 asset + 3-category official news
 const row4=w.addStack();row4.spacing=7;
 
 const assetCard=row4.addStack();assetCard.layoutVertically();
 assetCard.backgroundColor=C.weakCard;assetCard.cornerRadius=12;
-assetCard.setPadding(5,7,5,7);assetCard.size=new Size(72,68);
+assetCard.setPadding(4,7,4,7);assetCard.size=new Size(72,56);
 let ah=assetCard.addStack();ah.centerAlignContent();
 icon(ah,"chart.line.uptrend.xyaxis",C.green,9);ah.addSpacer(4);
 let ax=ah.addText("資産");ax.font=Font.boldSystemFont(9);ax.textColor=C.text;
@@ -377,7 +377,7 @@ ax=assetCard.addText("安全な接続待ち");ax.font=Font.systemFont(6);ax.text
 
 const newsCard=row4.addStack();newsCard.layoutVertically();
 newsCard.backgroundColor=C.weakCard;newsCard.cornerRadius=12;
-newsCard.setPadding(5,8,5,8);newsCard.size=new Size(256,68);
+newsCard.setPadding(4,8,4,8);newsCard.size=new Size(256,56);
 
 let nh=newsCard.addStack();nh.centerAlignContent();
 icon(nh,"newspaper.fill",C.blue,10);nh.addSpacer(5);
@@ -385,7 +385,7 @@ let nx=nh.addText("ニュース");nx.font=Font.boldSystemFont(9);nx.textColor=C.
 nh.addSpacer();
 nx=nh.addText(newsData.ok?"公式ソース":"取得失敗");
 nx.font=Font.systemFont(7);nx.textColor=newsData.ok?C.green:C.red;
-newsCard.addSpacer(2);
+newsCard.addSpacer(1);
 
 for(let i=0;i<newsData.categories.length;i++){
   const cat=newsData.categories[i];
@@ -414,8 +414,8 @@ for(let i=0;i<newsData.categories.length;i++){
     let title=line.addText(cat.item.title);
     title.font=Font.systemFont(7);
     title.textColor=C.text;
-    title.lineLimit=2;
-    title.minimumScaleFactor=0.78;
+    title.lineLimit=1;
+    title.minimumScaleFactor=0.70;
 
     if(cat.item.link) line.url=cat.item.link;
   }
@@ -423,14 +423,14 @@ for(let i=0;i<newsData.categories.length;i++){
   if(i<newsData.categories.length-1) newsCard.addSpacer(1);
 }
 
-w.addSpacer();
+w.addSpacer(4);
 const footer=w.addStack();footer.centerAlignContent();
 const ok=W.ok&&eventsData.ok&&tasksData.ok&&(universityData.reminderOK||universityData.calendarOK)&&life.sourcesOK&&newsData.categories.every(x=>x.ok);
 t=footer.addText("●");t.font=Font.systemFont(7);t.textColor=ok?C.green:C.orange;footer.addSpacer(4);
-t=footer.addText("最終取得");t.font=Font.systemFont(8);t.textColor=C.sub;footer.addSpacer(4);
-const rel=footer.addDate(fetchedAt);rel.applyRelativeStyle();rel.font=Font.systemFont(8);rel.textColor=C.sub;
+t=footer.addText("最終取得");t.font=Font.systemFont(7);t.textColor=C.sub;footer.addSpacer(4);
+const rel=footer.addDate(fetchedAt);rel.applyRelativeStyle();rel.font=Font.systemFont(7);rel.textColor=C.sub;
 footer.addSpacer();t=footer.addText("v"+VERSION);t.font=Font.systemFont(7);t.textColor=C.gray;footer.addSpacer(6);
-t=footer.addText(position.ok?"現在地":"位置情報:予備地点");t.font=Font.systemFont(8);t.textColor=position.ok?C.sub:C.orange;
+t=footer.addText(position.ok?"現在地":"位置情報:予備地点");t.font=Font.systemFont(7);t.textColor=position.ok?C.sub:C.orange;
 
 w.refreshAfterDate=new Date(Date.now()+CFG.refreshMinutes*60*1000);
 if(config.runsInWidget) Script.setWidget(w); else await w.presentLarge();
