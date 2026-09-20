@@ -2,7 +2,7 @@
 // Remote main for Scriptable loader.
 // IMPORTANT: Script.complete() は loader 側で呼ぶ。
 
-const VERSION = "1.5.1-github";
+const VERSION = "1.6-github";
 
 const USER = globalThis.ORE_DASH_CONFIG || {};
 
@@ -199,28 +199,33 @@ let t=left.addText(position.city);t.font=Font.boldSystemFont(16);t.textColor=C.b
 t=left.addText(todayText());t.font=Font.systemFont(9);t.textColor=C.sub;
 header.addSpacer();
 if(W.ok){
-  t=header.addText(W.temp+"°");t.font=Font.boldSystemFont(26);t.textColor=C.text;header.addSpacer(6);
-  t=header.addText(weatherName);t.font=Font.semiboldSystemFont(10);t.textColor=C.sub;header.addSpacer(6);
-  icon(header,weatherIcon,C.blue,22);
+  const weatherBox=header.addStack();weatherBox.layoutVertically();
+  const weatherTop=weatherBox.addStack();weatherTop.centerAlignContent();
+  t=weatherTop.addText(W.temp+"°");t.font=Font.boldSystemFont(26);t.textColor=C.text;weatherTop.addSpacer(6);
+  t=weatherTop.addText(weatherName);t.font=Font.semiboldSystemFont(10);t.textColor=C.sub;weatherTop.addSpacer(6);
+  icon(weatherTop,weatherIcon,C.blue,22);
+  weatherBox.addSpacer(1);
+  const weatherMeta=weatherBox.addStack();weatherMeta.centerAlignContent();
+  t=weatherMeta.addText("↑"+W.max+"°  ↓"+W.min+"°  降水"+W.rain+"%");t.font=Font.systemFont(8);t.textColor=C.sub;
 }else{t=header.addText("天気取得失敗");t.font=Font.semiboldSystemFont(10);t.textColor=C.red;}
-w.addSpacer(7);
+w.addSpacer(5);
 
 // ROW1
 const row1=w.addStack();row1.spacing=8;
-const eventCard=mkCard(row1);eventCard.size=new Size(164,96);section(eventCard,"calendar","今日の予定",C.blue);eventCard.addSpacer(5);
+const eventCard=mkCard(row1);eventCard.size=new Size(178,90);section(eventCard,"calendar","今日の予定",C.blue);eventCard.addSpacer(5);
 if(!eventsData.ok){t=eventCard.addText("取得失敗");t.font=Font.systemFont(9);t.textColor=C.red;}
 else if(!eventsData.items.length){t=eventCard.addText("この後の予定なし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else eventsData.items.forEach((e,i)=>{const l=eventCard.addStack();l.centerAlignContent();let x=l.addText(fmtTime(e.startDate,e.isAllDay));x.font=Font.semiboldSystemFont(9);x.textColor=C.blue;l.addSpacer(5);x=l.addText(shorten(e.title,18));x.font=Font.systemFont(9);x.textColor=C.text;x.lineLimit=1;if(i<eventsData.items.length-1)eventCard.addSpacer(3);});
 
-const taskCard=mkCard(row1);taskCard.size=new Size(136,96);section(taskCard,"checkmark.circle.fill","やること",C.green);taskCard.addSpacer(5);
+const taskCard=mkCard(row1);taskCard.size=new Size(151,90);section(taskCard,"checkmark.circle.fill","やること",C.green);taskCard.addSpacer(5);
 if(!tasksData.ok){t=taskCard.addText("取得失敗");t.font=Font.systemFont(9);t.textColor=C.red;}
 else if(!tasksData.items.length){t=taskCard.addText("今日のタスクなし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else tasksData.items.forEach((r,i)=>{const l=taskCard.addStack();l.centerAlignContent();icon(l,"circle",r.isOverdue?C.red:C.green,8);l.addSpacer(5);const x=l.addText(shorten(r.title,16));x.font=Font.systemFont(9);x.textColor=C.text;x.lineLimit=1;if(i<tasksData.items.length-1)taskCard.addSpacer(3);});
-w.addSpacer(6);
+w.addSpacer(5);
 
 // ROW2
 const row2=w.addStack();row2.spacing=8;
-const family=mkCard(row2);family.size=new Size(105,100);section(family,"person.2.fill","家族",C.orange);family.addSpacer(4);
+const family=mkCard(row2);family.size=new Size(112,94);section(family,"person.2.fill","家族",C.orange);family.addSpacer(4);
 t=family.addText("結婚記念日");t.font=Font.systemFont(9);t.textColor=C.sub;
 if(ann){
   t=family.addText(ann.days===0?"今日 ♥":"あと"+ann.days+"日");t.font=Font.boldSystemFont(19);t.textColor=C.text;
@@ -229,18 +234,18 @@ if(ann){
   t=family.addText("未設定");t.font=Font.boldSystemFont(13);t.textColor=C.sub;
 }
 
-const uni=mkCard(row2);uni.size=new Size(195,100);const uh=section(uni,"graduationcap.fill","放送大学",C.purple);uh.addSpacer();
+const uni=mkCard(row2);uni.size=new Size(217,94);const uh=section(uni,"graduationcap.fill","放送大学",C.purple);uh.addSpacer();
 t=uh.addText((universityData.reminderOK||universityData.calendarOK)?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=(universityData.reminderOK||universityData.calendarOK)?C.green:C.red;uni.addSpacer(4);
 if(!universityData.items.length){t=uni.addText("検出イベントなし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else universityData.items.forEach((it,i)=>{const l=uni.addStack();l.centerAlignContent();let x=l.addText(it.kind);x.font=Font.boldSystemFont(8);x.textColor=it.color;l.addSpacer(4);x=l.addText(relativeDay(it.date));x.font=Font.boldSystemFont(9);x.textColor=it.color;l.addSpacer(4);x=l.addText(fmtDate(it.date));x.font=Font.systemFont(8);x.textColor=C.sub;l.addSpacer(4);x=l.addText(shorten(it.title,11));x.font=Font.systemFont(8);x.textColor=C.text;x.lineLimit=1;if(i<universityData.items.length-1)uni.addSpacer(3);});
-w.addSpacer(6);
+w.addSpacer(5);
 
 // ROW3 lifestyle
-const lifeCard=mkCard(w);lifeCard.setPadding(7,9,7,9);const lh=section(lifeCard,"leaf.fill","暮らし・趣味",C.green);lh.addSpacer();
-t=lh.addText(life.sourcesOK?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=life.sourcesOK?C.green:C.red;lifeCard.addSpacer(5);
+const lifeCard=mkCard(w);lifeCard.setPadding(6,9,6,9);const lh=section(lifeCard,"leaf.fill","暮らし・趣味",C.green);lh.addSpacer();
+t=lh.addText(life.sourcesOK?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=life.sourcesOK?C.green:C.red;lifeCard.addSpacer(4);
 const lr=lifeCard.addStack();lr.spacing=7;
 function lifeCol(cat,item,extra){
-  const c=lr.addStack();c.layoutVertically();c.size=new Size(94,48);
+  const c=lr.addStack();c.layoutVertically();c.size=new Size(105,42);
   const h=c.addStack();h.centerAlignContent();icon(h,cat.icon,cat.color,10);h.addSpacer(4);let x=h.addText(cat.title);x.font=Font.boldSystemFont(9);x.textColor=C.text;c.addSpacer(3);
   if(!life.sourcesOK){x=c.addText("取得失敗");x.font=Font.systemFont(8);x.textColor=C.red;}
   else if(!item){x=c.addText("予定なし");x.font=Font.systemFont(8);x.textColor=C.sub;}
@@ -248,12 +253,12 @@ function lifeCol(cat,item,extra){
   if(extra){x=c.addText(extra);x.font=Font.systemFont(7);x.textColor=C.gray;}
 }
 lifeCol(LIFESTYLE.fishing,life.fishing,"潮汐 未接続");lifeCol(LIFESTYLE.garden,life.garden);lifeCol(LIFESTYLE.workout,life.workout);
-w.addSpacer(6);
+w.addSpacer(5);
 
 // ROW4 full width placeholders
 const row4=w.addStack();row4.spacing=8;
 function wideCard(iconName,title,color){
-  const c=row4.addStack();c.layoutVertically();c.backgroundColor=C.weakCard;c.cornerRadius=12;c.setPadding(7,9,7,9);c.size=new Size(150,47);
+  const c=row4.addStack();c.layoutVertically();c.backgroundColor=C.weakCard;c.cornerRadius=12;c.setPadding(5,9,5,9);c.size=new Size(160,42);
   const h=c.addStack();h.centerAlignContent();icon(h,iconName,color,10);h.addSpacer(5);let x=h.addText(title);x.font=Font.boldSystemFont(9);x.textColor=C.text;h.addSpacer();x=h.addText("未接続");x.font=Font.systemFont(8);x.textColor=C.gray;c.addSpacer(3);x=c.addText("データソース未設定");x.font=Font.systemFont(7);x.textColor=C.gray;
 }
 wideCard("chart.line.uptrend.xyaxis","資産",C.green);wideCard("newspaper.fill","ニュース",C.blue);
