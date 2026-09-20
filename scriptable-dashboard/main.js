@@ -2,23 +2,29 @@
 // Remote main for Scriptable loader.
 // IMPORTANT: Script.complete() は loader 側で呼ぶ。
 
-const VERSION = "1.5-github";
+const VERSION = "1.5.1-github";
 
-const CFG = {
-  fallbackCity:"伊勢崎", fallbackLat:36.31, fallbackLon:139.20,
-  maxEvents:3, maxTasks:3,
-  universityLookAheadDays:180, universityMaxItems:3,
+const USER = globalThis.ORE_DASH_CONFIG || {};
+
+const CFG = Object.assign({
+  fallbackCity:"現在地",
+  fallbackLat:35.6812,
+  fallbackLon:139.7671,
+  maxEvents:3,
+  maxTasks:3,
+  universityLookAheadDays:180,
+  universityMaxItems:3,
   lifestyleLookAheadDays:45,
-  anniversaryMonth:9, anniversaryDay:28,
+  anniversaryMonth:null,
+  anniversaryDay:null,
   refreshMinutes:15
-};
+}, USER.cfg || {});
 
-const UNIVERSITY_KEYWORDS = [
-  "放送大学","シン・ビートルズ de 英文法","社会調査の基礎","社会学概論",
-  "イノベーション・マネジメント","雇用社会と法","マーケティング",
-  "現代の内部監査","情報社会のユニバーサルデザイン",
-  "情報化社会におけるメディア教育","宇宙の誕生と進化"
-];
+const UNIVERSITY_KEYWORDS =
+  (USER.universityKeywords && USER.universityKeywords.length)
+    ? USER.universityKeywords
+    : ["放送大学"];
+
 const DEADLINE_KEYWORDS = ["締切","〆切","期限","払込期限","納入期限","提出期限","申込期限","申請期限","回答期限","最終日","必着"];
 const START_KEYWORDS = ["開始","提出開始","受付開始","申込開始","申請開始","試験開始","公開開始"];
 const END_KEYWORDS = ["終了","提出終了","受付終了","申込終了","申請終了"];
@@ -33,10 +39,21 @@ const C = {
   card:new Color("#FFFFFF",0.82), weakCard:new Color("#FFFFFF",0.64)
 };
 
+const LIFE_KEYS = USER.lifestyleKeywords || {};
+
 const LIFESTYLE = {
-  fishing:{title:"釣り",icon:"fish.fill",color:C.blue,keywords:["釣り","釣行","アジング","サビキ","泳がせ","遠投カゴ","ぶっ込み","ショアジギ","ジギング","伊豆釣行","堤防釣り","磯釣り"]},
-  garden:{title:"菜園",icon:"leaf.fill",color:C.green,keywords:["菜園","家庭菜園","水やり","追肥","植え替え","播種","種まき","収穫","摘心","受粉","ズッキーニ","ナス","バジル","ほうれん草","ラディッシュ","レモン","ブルーベリー","パイナップル","タラの芽"]},
-  workout:{title:"筋トレ",icon:"dumbbell.fill",color:C.purple,keywords:["筋トレ","トレーニング","胸トレ","背中トレ","脚トレ","肩トレ","腕トレ","ジム","ベンチプレス","スクワット","デッドリフト"]}
+  fishing:{
+    title:"釣り",icon:"fish.fill",color:C.blue,
+    keywords:LIFE_KEYS.fishing || ["釣り","釣行","アジング","サビキ","泳がせ","ジギング"]
+  },
+  garden:{
+    title:"菜園",icon:"leaf.fill",color:C.green,
+    keywords:LIFE_KEYS.garden || ["菜園","家庭菜園","水やり","追肥","収穫"]
+  },
+  workout:{
+    title:"筋トレ",icon:"dumbbell.fill",color:C.purple,
+    keywords:LIFE_KEYS.workout || ["筋トレ","トレーニング","ジム"]
+  }
 };
 
 function icon(stack,name,color,size=12){const sf=SFSymbol.named(name);sf.applyFont(Font.systemFont(size));const i=stack.addImage(sf.image);i.imageSize=new Size(size,size);i.tintColor=color;return i;}
@@ -158,6 +175,7 @@ function nextLifestyle(src,cat){
 }
 
 function anniversary(){
+  if(!CFG.anniversaryMonth || !CFG.anniversaryDay) return null;
   const n=new Date();let t=new Date(n.getFullYear(),CFG.anniversaryMonth-1,CFG.anniversaryDay);
   if(dayStart(t)<dayStart(n))t=new Date(n.getFullYear()+1,CFG.anniversaryMonth-1,CFG.anniversaryDay);
   return {date:t,days:daysBetween(n,t)};
@@ -204,8 +222,12 @@ w.addSpacer(6);
 const row2=w.addStack();row2.spacing=8;
 const family=mkCard(row2);family.size=new Size(105,100);section(family,"person.2.fill","家族",C.orange);family.addSpacer(4);
 t=family.addText("結婚記念日");t.font=Font.systemFont(9);t.textColor=C.sub;
-t=family.addText(ann.days===0?"今日 ♥":"あと"+ann.days+"日");t.font=Font.boldSystemFont(19);t.textColor=C.text;
-t=family.addText(fmtDate(ann.date));t.font=Font.systemFont(8);t.textColor=C.sub;
+if(ann){
+  t=family.addText(ann.days===0?"今日 ♥":"あと"+ann.days+"日");t.font=Font.boldSystemFont(19);t.textColor=C.text;
+  t=family.addText(fmtDate(ann.date));t.font=Font.systemFont(8);t.textColor=C.sub;
+}else{
+  t=family.addText("未設定");t.font=Font.boldSystemFont(13);t.textColor=C.sub;
+}
 
 const uni=mkCard(row2);uni.size=new Size(195,100);const uh=section(uni,"graduationcap.fill","放送大学",C.purple);uh.addSpacer();
 t=uh.addText((universityData.reminderOK||universityData.calendarOK)?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=(universityData.reminderOK||universityData.calendarOK)?C.green:C.red;uni.addSpacer(4);
