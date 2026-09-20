@@ -2,7 +2,7 @@
 // Remote main for Scriptable loader.
 // IMPORTANT: Script.complete() は loader 側で呼ぶ。
 
-const VERSION = "1.7-github";
+const VERSION = "1.8-github";
 
 const USER = globalThis.ORE_DASH_CONFIG || {};
 
@@ -56,10 +56,36 @@ const LIFESTYLE = {
   }
 };
 
-const NEWS_SOURCES = [
-  {name:"OpenAI", url:"https://openai.com/news/rss.xml"},
-  {name:"DeepMind", url:"https://deepmind.google/blog/rss.xml"},
-  {name:"GitHub AI", url:"https://github.blog/ai-and-ml/feed/"}
+const NEWS_CATEGORIES = [
+  {
+    key:"AI",
+    label:"AI",
+    color:C.purple,
+    maxAgeDays:30,
+    sources:[
+      {name:"OpenAI",url:"https://openai.com/news/rss.xml"},
+      {name:"DeepMind",url:"https://deepmind.google/blog/rss.xml"},
+      {name:"GitHub",url:"https://github.blog/ai-and-ml/feed/"}
+    ]
+  },
+  {
+    key:"CAR",
+    label:"車",
+    color:C.blue,
+    maxAgeDays:45,
+    sources:[
+      {name:"Toyota",url:"https://global.toyota/export/jp/allnews_rss.xml"}
+    ]
+  },
+  {
+    key:"MARKET",
+    label:"市場",
+    color:C.green,
+    maxAgeDays:45,
+    sources:[
+      {name:"FRB",url:"https://www.federalreserve.gov/feeds/press_monetary.xml"}
+    ]
+  }
 ];
 
 function icon(stack,name,color,size=12){const sf=SFSymbol.named(name);sf.applyFont(Font.systemFont(size));const i=stack.addImage(sf.image);i.imageSize=new Size(size,size);i.tintColor=color;return i;}
@@ -101,24 +127,56 @@ function rssItems(xml,source){
     return {source,title,link,date:(date && !isNaN(date.getTime()))?date:null};
   }).filter(x=>x.title);
 }
-async function getNews(){
-  const results=[];
-  let success=0;
-  for(const src of NEWS_SOURCES){
-    try{
-      const req=new Request(src.url);req.timeoutInterval=10;
-      const xml=await req.loadString();
-      const items=rssItems(xml,src.name);
-      if(items.length){success++;results.push(...items.slice(0,4));}
-    }catch(_){}
+async function fetchFeedSource(src){
+  try{
+    const req=new Request(src.url);req.timeoutInterval=10;
+    const xml=await req.loadString();
+    const items=rssItems(xml,src.name);
+    return {ok:true,items};
+  }catch(_){
+    return {ok:false,items:[]};
   }
-  results.sort((a,b)=>{
-    if(a.date && b.date) return b.date-a.date;
-    if(a.date) return -1;
-    if(b.date) return 1;
-    return 0;
-  });
-  return {ok:success>0,sourceCount:success,items:results.slice(0,2)};
+}
+
+async function getNews(){
+  const now=Date.now();
+  const categories=[];
+
+  for(const cat of NEWS_CATEGORIES){
+    let sourceSuccess=false;
+    let pool=[];
+
+    for(const src of cat.sources){
+      const r=await fetchFeedSource(src);
+      if(r.ok){
+        sourceSuccess=true;
+        pool.push(...r.items);
+      }
+    }
+
+    const freshMs=cat.maxAgeDays*86400000;
+    const fresh=pool
+      .filter(x=>!x.date || (now-x.date.getTime())<=freshMs)
+      .sort((a,b)=>{
+        if(a.date && b.date) return b.date-a.date;
+        if(a.date) return -1;
+        if(b.date) return 1;
+        return 0;
+      });
+
+    categories.push({
+      key:cat.key,
+      label:cat.label,
+      color:cat.color,
+      ok:sourceSuccess,
+      item:fresh[0]||null
+    });
+  }
+
+  return {
+    ok:categories.some(x=>x.ok),
+    categories
+  };
 }
 
 async function getPosition(){
@@ -261,12 +319,12 @@ w.addSpacer(5);
 
 // ROW1
 const row1=w.addStack();row1.spacing=8;
-const eventCard=mkCard(row1);eventCard.size=new Size(178,90);section(eventCard,"calendar","今日の予定",C.blue);eventCard.addSpacer(5);
+const eventCard=mkCard(row1);eventCard.size=new Size(178,86);section(eventCard,"calendar","今日の予定",C.blue);eventCard.addSpacer(5);
 if(!eventsData.ok){t=eventCard.addText("取得失敗");t.font=Font.systemFont(9);t.textColor=C.red;}
 else if(!eventsData.items.length){t=eventCard.addText("この後の予定なし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else eventsData.items.forEach((e,i)=>{const l=eventCard.addStack();l.centerAlignContent();let x=l.addText(fmtTime(e.startDate,e.isAllDay));x.font=Font.semiboldSystemFont(9);x.textColor=C.blue;l.addSpacer(5);x=l.addText(shorten(e.title,18));x.font=Font.systemFont(9);x.textColor=C.text;x.lineLimit=1;if(i<eventsData.items.length-1)eventCard.addSpacer(3);});
 
-const taskCard=mkCard(row1);taskCard.size=new Size(151,90);section(taskCard,"checkmark.circle.fill","やること",C.green);taskCard.addSpacer(5);
+const taskCard=mkCard(row1);taskCard.size=new Size(151,86);section(taskCard,"checkmark.circle.fill","やること",C.green);taskCard.addSpacer(5);
 if(!tasksData.ok){t=taskCard.addText("取得失敗");t.font=Font.systemFont(9);t.textColor=C.red;}
 else if(!tasksData.items.length){t=taskCard.addText("今日のタスクなし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else tasksData.items.forEach((r,i)=>{const l=taskCard.addStack();l.centerAlignContent();icon(l,"circle",r.isOverdue?C.red:C.green,8);l.addSpacer(5);const x=l.addText(shorten(r.title,16));x.font=Font.systemFont(9);x.textColor=C.text;x.lineLimit=1;if(i<tasksData.items.length-1)taskCard.addSpacer(3);});
@@ -274,7 +332,7 @@ w.addSpacer(5);
 
 // ROW2
 const row2=w.addStack();row2.spacing=8;
-const family=mkCard(row2);family.size=new Size(112,94);section(family,"person.2.fill","家族",C.orange);family.addSpacer(4);
+const family=mkCard(row2);family.size=new Size(112,90);section(family,"person.2.fill","家族",C.orange);family.addSpacer(4);
 t=family.addText("結婚記念日");t.font=Font.systemFont(9);t.textColor=C.sub;
 if(ann){
   t=family.addText(ann.days===0?"今日 ♥":"あと"+ann.days+"日");t.font=Font.boldSystemFont(19);t.textColor=C.text;
@@ -283,7 +341,7 @@ if(ann){
   t=family.addText("未設定");t.font=Font.boldSystemFont(13);t.textColor=C.sub;
 }
 
-const uni=mkCard(row2);uni.size=new Size(217,94);const uh=section(uni,"graduationcap.fill","放送大学",C.purple);uh.addSpacer();
+const uni=mkCard(row2);uni.size=new Size(217,90);const uh=section(uni,"graduationcap.fill","放送大学",C.purple);uh.addSpacer();
 t=uh.addText((universityData.reminderOK||universityData.calendarOK)?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=(universityData.reminderOK||universityData.calendarOK)?C.green:C.red;uni.addSpacer(4);
 if(!universityData.items.length){t=uni.addText("検出イベントなし");t.font=Font.systemFont(9);t.textColor=C.sub;}
 else universityData.items.forEach((it,i)=>{const l=uni.addStack();l.centerAlignContent();let x=l.addText(it.kind);x.font=Font.boldSystemFont(8);x.textColor=it.color;l.addSpacer(4);x=l.addText(relativeDay(it.date));x.font=Font.boldSystemFont(9);x.textColor=it.color;l.addSpacer(4);x=l.addText(fmtDate(it.date));x.font=Font.systemFont(8);x.textColor=C.sub;l.addSpacer(4);x=l.addText(shorten(it.title,11));x.font=Font.systemFont(8);x.textColor=C.text;x.lineLimit=1;if(i<universityData.items.length-1)uni.addSpacer(3);});
@@ -294,7 +352,7 @@ const lifeCard=mkCard(w);lifeCard.setPadding(6,9,6,9);const lh=section(lifeCard,
 t=lh.addText(life.sourcesOK?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=life.sourcesOK?C.green:C.red;lifeCard.addSpacer(4);
 const lr=lifeCard.addStack();lr.spacing=7;
 function lifeCol(cat,item,extra){
-  const c=lr.addStack();c.layoutVertically();c.size=new Size(105,42);
+  const c=lr.addStack();c.layoutVertically();c.size=new Size(105,38);
   const h=c.addStack();h.centerAlignContent();icon(h,cat.icon,cat.color,10);h.addSpacer(4);let x=h.addText(cat.title);x.font=Font.boldSystemFont(9);x.textColor=C.text;c.addSpacer(3);
   if(!life.sourcesOK){x=c.addText("取得失敗");x.font=Font.systemFont(8);x.textColor=C.red;}
   else if(!item){x=c.addText("予定なし");x.font=Font.systemFont(8);x.textColor=C.sub;}
@@ -304,37 +362,70 @@ function lifeCol(cat,item,extra){
 lifeCol(LIFESTYLE.fishing,life.fishing,"潮汐 未接続");lifeCol(LIFESTYLE.garden,life.garden);lifeCol(LIFESTYLE.workout,life.workout);
 w.addSpacer(5);
 
-// ROW4 asset + live official AI news
-const row4=w.addStack();row4.spacing=8;
+// ROW4 asset + 3-category official news
+const row4=w.addStack();row4.spacing=7;
 
-const assetCard=row4.addStack();assetCard.layoutVertically();assetCard.backgroundColor=C.weakCard;assetCard.cornerRadius=12;assetCard.setPadding(5,9,5,9);assetCard.size=new Size(118,48);
-let ah=assetCard.addStack();ah.centerAlignContent();icon(ah,"chart.line.uptrend.xyaxis",C.green,10);ah.addSpacer(5);
-let ax=ah.addText("資産");ax.font=Font.boldSystemFont(9);ax.textColor=C.text;ah.addSpacer();
-ax=ah.addText("未接続");ax.font=Font.systemFont(8);ax.textColor=C.gray;
-assetCard.addSpacer(3);ax=assetCard.addText("データソース未設定");ax.font=Font.systemFont(7);ax.textColor=C.gray;
+const assetCard=row4.addStack();assetCard.layoutVertically();
+assetCard.backgroundColor=C.weakCard;assetCard.cornerRadius=12;
+assetCard.setPadding(5,7,5,7);assetCard.size=new Size(72,68);
+let ah=assetCard.addStack();ah.centerAlignContent();
+icon(ah,"chart.line.uptrend.xyaxis",C.green,9);ah.addSpacer(4);
+let ax=ah.addText("資産");ax.font=Font.boldSystemFont(9);ax.textColor=C.text;
+assetCard.addSpacer(4);
+ax=assetCard.addText("未接続");ax.font=Font.systemFont(8);ax.textColor=C.gray;
+ax=assetCard.addText("安全な接続待ち");ax.font=Font.systemFont(6);ax.textColor=C.gray;
 
-const newsCard=row4.addStack();newsCard.layoutVertically();newsCard.backgroundColor=C.weakCard;newsCard.cornerRadius=12;newsCard.setPadding(5,9,5,9);newsCard.size=new Size(210,48);
-let nh=newsCard.addStack();nh.centerAlignContent();icon(nh,"newspaper.fill",C.blue,10);nh.addSpacer(5);
-let nx=nh.addText("ニュース");nx.font=Font.boldSystemFont(9);nx.textColor=C.text;nh.addSpacer();
-nx=nh.addText(newsData.ok?"AI公式":"取得失敗");nx.font=Font.systemFont(8);nx.textColor=newsData.ok?C.green:C.red;
+const newsCard=row4.addStack();newsCard.layoutVertically();
+newsCard.backgroundColor=C.weakCard;newsCard.cornerRadius=12;
+newsCard.setPadding(5,8,5,8);newsCard.size=new Size(256,68);
+
+let nh=newsCard.addStack();nh.centerAlignContent();
+icon(nh,"newspaper.fill",C.blue,10);nh.addSpacer(5);
+let nx=nh.addText("ニュース");nx.font=Font.boldSystemFont(9);nx.textColor=C.text;
+nh.addSpacer();
+nx=nh.addText(newsData.ok?"公式ソース":"取得失敗");
+nx.font=Font.systemFont(7);nx.textColor=newsData.ok?C.green:C.red;
 newsCard.addSpacer(2);
 
-if(!newsData.ok || !newsData.items.length){
-  nx=newsCard.addText("公式RSSを取得できません");nx.font=Font.systemFont(8);nx.textColor=C.sub;
-}else{
-  newsData.items.forEach((item,i)=>{
-    const line=newsCard.addStack();line.centerAlignContent();
-    let src=line.addText(item.source);src.font=Font.semiboldSystemFont(7);src.textColor=C.blue;
+for(let i=0;i<newsData.categories.length;i++){
+  const cat=newsData.categories[i];
+  const line=newsCard.addStack();
+  line.topAlignContent();
+
+  let badge=line.addText(cat.label);
+  badge.font=Font.boldSystemFont(7);
+  badge.textColor=cat.color;
+  line.addSpacer(4);
+
+  if(!cat.ok){
+    let state=line.addText("取得失敗");
+    state.font=Font.systemFont(7);
+    state.textColor=C.red;
+  }else if(!cat.item){
+    let state=line.addText("新着なし");
+    state.font=Font.systemFont(7);
+    state.textColor=C.gray;
+  }else{
+    let src=line.addText(cat.item.source);
+    src.font=Font.semiboldSystemFont(6);
+    src.textColor=C.sub;
     line.addSpacer(4);
-    let title=line.addText(shorten(item.title,24));title.font=Font.systemFont(7);title.textColor=C.text;title.lineLimit=1;
-    if(item.link) line.url=item.link;
-    if(i<newsData.items.length-1) newsCard.addSpacer(2);
-  });
+
+    let title=line.addText(cat.item.title);
+    title.font=Font.systemFont(7);
+    title.textColor=C.text;
+    title.lineLimit=2;
+    title.minimumScaleFactor=0.78;
+
+    if(cat.item.link) line.url=cat.item.link;
+  }
+
+  if(i<newsData.categories.length-1) newsCard.addSpacer(1);
 }
 
 w.addSpacer();
 const footer=w.addStack();footer.centerAlignContent();
-const ok=W.ok&&eventsData.ok&&tasksData.ok&&(universityData.reminderOK||universityData.calendarOK)&&life.sourcesOK&&newsData.ok;
+const ok=W.ok&&eventsData.ok&&tasksData.ok&&(universityData.reminderOK||universityData.calendarOK)&&life.sourcesOK&&newsData.categories.every(x=>x.ok);
 t=footer.addText("●");t.font=Font.systemFont(7);t.textColor=ok?C.green:C.orange;footer.addSpacer(4);
 t=footer.addText("最終取得");t.font=Font.systemFont(8);t.textColor=C.sub;footer.addSpacer(4);
 const rel=footer.addDate(fetchedAt);rel.applyRelativeStyle();rel.font=Font.systemFont(8);rel.textColor=C.sub;
