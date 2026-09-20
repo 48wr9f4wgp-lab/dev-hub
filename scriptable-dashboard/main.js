@@ -2,7 +2,7 @@
 // Remote main for Scriptable loader.
 // IMPORTANT: Script.complete() は loader 側で呼ぶ。
 
-const VERSION = "1.10-github";
+const VERSION = "1.11-github";
 
 const USER = globalThis.ORE_DASH_CONFIG || {};
 
@@ -87,6 +87,15 @@ const NEWS_CATEGORIES = [
     ]
   }
 ];
+
+const TIDE = {
+  // 現在は伊豆釣行の基準点として石廊崎を採用。
+  // 気象庁 潮位表の天文潮位予測を使用する。
+  station:"G9",
+  stationName:"石廊崎",
+  sourceLabel:"気象庁予測"
+};
+
 
 function icon(stack,name,color,size=12){const sf=SFSymbol.named(name);sf.applyFont(Font.systemFont(size));const i=stack.addImage(sf.image);i.imageSize=new Size(size,size);i.tintColor=color;return i;}
 function normalize(v){return v?String(v).replace(/\s+/g," ").trim():"";}
@@ -177,6 +186,107 @@ async function getNews(){
     ok:categories.some(x=>x.ok),
     categories
   };
+}
+
+
+function htmlText(v){
+  return String(v||"")
+    .replace(/<script\b[\s\S]*?<\/script>/gi,"")
+    .replace(/<style\b[\s\S]*?<\/style>/gi,"")
+    .replace(/<[^>]+>/g," ")
+    .replace(/&nbsp;|&#160;/gi," ")
+    .replace(/&amp;/gi,"&")
+    .replace(/&lt;/gi,"<")
+    .replace(/&gt;/gi,">")
+    .replace(/&quot;/gi,'"')
+    .replace(/&#39;/gi,"'")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function tideRowCells(html,dateKey){
+  const rows=String(html||"").match(/<tr\b[\s\S]*?<\/tr>/gi)||[];
+  const row=rows.find(r=>htmlText(r).includes(dateKey));
+  if(!row) return null;
+  const cells=[];
+  const re=/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi;
+  let m;
+  while((m=re.exec(row))!==null) cells.push(htmlText(m[1]));
+  return cells;
+}
+
+function tidePairs(cells,startIndex,endIndex){
+  const out=[];
+  for(let i=startIndex;i+1<=endIndex;i+=2){
+    const time=(cells[i]||"").trim();
+    const level=(cells[i+1]||"").trim();
+    if(/^\d{1,2}:\d{2}$/.test(time) && /^-?\d+$/.test(level)){
+      out.push({time,level:Number(level)});
+    }
+  }
+  return out;
+}
+
+async function getTide(){
+  try{
+    const now=new Date();
+    const y=now.getFullYear();
+    const m=now.getMonth()+1;
+    const d=now.getDate();
+    const mm=String(m).padStart(2,"0");
+    const dd=String(d).padStart(2,"0");
+    const dateKey=y+"/"+mm+"/"+dd;
+
+    const url=
+      "https://www.data.jma.go.jp/kaiyou/db/tide/suisan/suisan.php"+
+      "?LV=DL&S_HILO=on"+
+      "&stn="+encodeURIComponent(TIDE.station)+
+      "&ys="+y+"&ms="+mm+"&ds="+dd+
+      "&ye="+y+"&me="+mm+"&de="+dd;
+
+    const req=new Request(url);
+    req.timeoutInterval=12;
+    const html=await req.loadString();
+    const cells=tideRowCells(html,dateKey);
+
+    if(!cells || cells.length<12) throw new Error("潮位表の当日行を解析できません");
+
+    // JMA table: date, moon, high x4 pairs, low x4 pairs
+    const highs=tidePairs(cells,2,9);
+    const lows=tidePairs(cells,10,17);
+
+    if(!highs.length && !lows.length) throw new Error("満干潮データなし");
+
+    return {
+      ok:true,
+      station:TIDE.stationName,
+      source:TIDE.sourceLabel,
+      highs,
+      lows,
+      url
+    };
+  }catch(e){
+    return {
+      ok:false,
+      station:TIDE.stationName,
+      source:TIDE.sourceLabel,
+      highs:[],
+      lows:[],
+      error:String(e)
+    };
+  }
+}
+
+function tideCompact(data){
+  if(!data.ok) return "潮汐 取得失敗";
+
+  const seq=[];
+  if(data.highs[0]) seq.push("満"+data.highs[0].time);
+  if(data.lows[0]) seq.push("干"+data.lows[0].time);
+  if(data.highs[1]) seq.push("満"+data.highs[1].time);
+  if(data.lows[1]) seq.push("干"+data.lows[1].time);
+
+  return seq.length ? seq.join(" ") : "潮汐 データなし";
 }
 
 async function getPosition(){
@@ -290,7 +400,7 @@ function anniversary(){
 
 const fetchedAt=new Date();
 const position=await getPosition();
-const [W,eventsData,tasksData,universityData,lifestyleSources,newsData]=await Promise.all([getWeather(position),getEvents(),getTasks(),getUniversityItems(),getLifestyleSources(),getNews()]);
+const [W,eventsData,tasksData,universityData,lifestyleSources,newsData,tideData]=await Promise.all([getWeather(position),getEvents(),getTasks(),getUniversityItems(),getLifestyleSources(),getNews(),getTide()]);
 const life={sourcesOK:lifestyleSources.calendarOK||lifestyleSources.reminderOK,fishing:nextLifestyle(lifestyleSources,LIFESTYLE.fishing),garden:nextLifestyle(lifestyleSources,LIFESTYLE.garden),workout:nextLifestyle(lifestyleSources,LIFESTYLE.workout)};
 const ann=anniversary();
 const [weatherName,weatherIcon]=weatherInfo(W.code);
@@ -359,14 +469,19 @@ const lifeCard=mkCard(w);lifeCard.setPadding(6,9,6,9);const lh=section(lifeCard,
 t=lh.addText(life.sourcesOK?"自動":"取得失敗");t.font=Font.systemFont(8);t.textColor=life.sourcesOK?C.green:C.red;lifeCard.addSpacer(4);
 const lr=lifeCard.addStack();lr.spacing=7;
 function lifeCol(cat,item,extra){
-  const c=lr.addStack();c.layoutVertically();c.size=new Size(105,32);
+  const c=lr.addStack();c.layoutVertically();c.size=new Size(105,38);
   const h=c.addStack();h.centerAlignContent();icon(h,cat.icon,cat.color,10);h.addSpacer(4);let x=h.addText(cat.title);x.font=Font.boldSystemFont(9);x.textColor=C.text;c.addSpacer(3);
   if(!life.sourcesOK){x=c.addText("取得失敗");x.font=Font.systemFont(8);x.textColor=C.red;}
   else if(!item){x=c.addText("予定なし");x.font=Font.systemFont(8);x.textColor=C.sub;}
   else{x=c.addText(relativeDay(item.date)+" "+fmtDate(item.date));x.font=Font.semiboldSystemFont(8);x.textColor=cat.color;x=c.addText(shorten(item.title,12));x.font=Font.systemFont(8);x.textColor=C.text;x.lineLimit=1;}
-  if(extra){x=c.addText(extra);x.font=Font.systemFont(7);x.textColor=C.gray;}
+  if(extra){
+    x=c.addText(extra);x.font=Font.systemFont(6);x.textColor=tideData && tideData.ok ? C.blue : C.gray;x.lineLimit=1;x.minimumScaleFactor=0.65;
+    if(cat===LIFESTYLE.fishing && tideData && tideData.ok){
+      x=c.addText(tideData.station+"・"+tideData.source);x.font=Font.systemFont(5);x.textColor=C.gray;x.lineLimit=1;
+    }
+  }
 }
-lifeCol(LIFESTYLE.fishing,life.fishing,"潮汐 未接続");lifeCol(LIFESTYLE.garden,life.garden);lifeCol(LIFESTYLE.workout,life.workout);
+lifeCol(LIFESTYLE.fishing,life.fishing,tideCompact(tideData));lifeCol(LIFESTYLE.garden,life.garden);lifeCol(LIFESTYLE.workout,life.workout);
 w.addSpacer(3);
 
 // ROW4 asset + 3-category official news
@@ -374,7 +489,7 @@ const row4=w.addStack();row4.spacing=7;
 
 const assetCard=row4.addStack();assetCard.layoutVertically();
 assetCard.backgroundColor=C.weakCard;assetCard.cornerRadius=12;
-assetCard.setPadding(3,7,3,7);assetCard.size=new Size(72,48);
+assetCard.setPadding(3,7,3,7);assetCard.size=new Size(72,44);
 let ah=assetCard.addStack();ah.centerAlignContent();
 icon(ah,"chart.line.uptrend.xyaxis",C.green,9);ah.addSpacer(4);
 let ax=ah.addText("資産");ax.font=Font.boldSystemFont(9);ax.textColor=C.text;
@@ -384,7 +499,7 @@ ax=assetCard.addText("安全な接続待ち");ax.font=Font.systemFont(6);ax.text
 
 const newsCard=row4.addStack();newsCard.layoutVertically();
 newsCard.backgroundColor=C.weakCard;newsCard.cornerRadius=12;
-newsCard.setPadding(3,8,3,8);newsCard.size=new Size(256,48);
+newsCard.setPadding(3,8,3,8);newsCard.size=new Size(256,44);
 
 let nh=newsCard.addStack();nh.centerAlignContent();
 icon(nh,"newspaper.fill",C.blue,10);nh.addSpacer(5);
