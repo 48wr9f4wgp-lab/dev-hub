@@ -2,7 +2,7 @@
 // Remote main for Scriptable loader.
 // IMPORTANT: Script.complete() は loader 側で呼ぶ。
 
-const VERSION = "1.6-github";
+const VERSION = "1.7-github";
 
 const USER = globalThis.ORE_DASH_CONFIG || {};
 
@@ -56,6 +56,12 @@ const LIFESTYLE = {
   }
 };
 
+const NEWS_SOURCES = [
+  {name:"OpenAI", url:"https://openai.com/news/rss.xml"},
+  {name:"DeepMind", url:"https://deepmind.google/blog/rss.xml"},
+  {name:"GitHub AI", url:"https://github.blog/ai-and-ml/feed/"}
+];
+
 function icon(stack,name,color,size=12){const sf=SFSymbol.named(name);sf.applyFont(Font.systemFont(size));const i=stack.addImage(sf.image);i.imageSize=new Size(size,size);i.tintColor=color;return i;}
 function normalize(v){return v?String(v).replace(/\s+/g," ").trim():"";}
 function shorten(v,n){v=normalize(v);return v.length<=n?v:v.slice(0,n-1)+"…";}
@@ -71,6 +77,49 @@ function realEventEnd(e){const d=new Date(e.endDate);if(e.isAllDay)d.setMillisec
 function calName(x){return x.calendar&&x.calendar.title?normalize(x.calendar.title):"";}
 function mkCard(p){const c=p.addStack();c.layoutVertically();c.backgroundColor=C.card;c.cornerRadius=14;c.setPadding(9,10,9,10);return c;}
 function section(p,symbol,title,color){const r=p.addStack();r.centerAlignContent();icon(r,symbol,color,11);r.addSpacer(5);const t=r.addText(title);t.font=Font.boldSystemFont(11);t.textColor=C.text;return r;}
+
+function decodeXML(v){
+  return normalize(v)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,"$1")
+    .replace(/&amp;/g,"&")
+    .replace(/&lt;/g,"<")
+    .replace(/&gt;/g,">")
+    .replace(/&quot;/g,'"')
+    .replace(/&#39;/g,"'");
+}
+function tagValue(block,tag){
+  const m=block.match(new RegExp("<"+tag+"(?:\\s[^>]*)?>([\\s\\S]*?)<\\/"+tag+">","i"));
+  return m?decodeXML(m[1]):"";
+}
+function rssItems(xml,source){
+  const blocks=xml.match(/<item\b[\s\S]*?<\/item>/gi)||[];
+  return blocks.map(b=>{
+    const title=tagValue(b,"title");
+    const link=tagValue(b,"link") || ((b.match(/<link[^>]*href=["']([^"']+)["']/i)||[])[1]||"");
+    const rawDate=tagValue(b,"pubDate")||tagValue(b,"published")||tagValue(b,"updated");
+    const date=rawDate?new Date(rawDate):null;
+    return {source,title,link,date:(date && !isNaN(date.getTime()))?date:null};
+  }).filter(x=>x.title);
+}
+async function getNews(){
+  const results=[];
+  let success=0;
+  for(const src of NEWS_SOURCES){
+    try{
+      const req=new Request(src.url);req.timeoutInterval=10;
+      const xml=await req.loadString();
+      const items=rssItems(xml,src.name);
+      if(items.length){success++;results.push(...items.slice(0,4));}
+    }catch(_){}
+  }
+  results.sort((a,b)=>{
+    if(a.date && b.date) return b.date-a.date;
+    if(a.date) return -1;
+    if(b.date) return 1;
+    return 0;
+  });
+  return {ok:success>0,sourceCount:success,items:results.slice(0,2)};
+}
 
 async function getPosition(){
   try{
@@ -183,7 +232,7 @@ function anniversary(){
 
 const fetchedAt=new Date();
 const position=await getPosition();
-const [W,eventsData,tasksData,universityData,lifestyleSources]=await Promise.all([getWeather(position),getEvents(),getTasks(),getUniversityItems(),getLifestyleSources()]);
+const [W,eventsData,tasksData,universityData,lifestyleSources,newsData]=await Promise.all([getWeather(position),getEvents(),getTasks(),getUniversityItems(),getLifestyleSources(),getNews()]);
 const life={sourcesOK:lifestyleSources.calendarOK||lifestyleSources.reminderOK,fishing:nextLifestyle(lifestyleSources,LIFESTYLE.fishing),garden:nextLifestyle(lifestyleSources,LIFESTYLE.garden),workout:nextLifestyle(lifestyleSources,LIFESTYLE.workout)};
 const ann=anniversary();
 const [weatherName,weatherIcon]=weatherInfo(W.code);
@@ -255,17 +304,37 @@ function lifeCol(cat,item,extra){
 lifeCol(LIFESTYLE.fishing,life.fishing,"潮汐 未接続");lifeCol(LIFESTYLE.garden,life.garden);lifeCol(LIFESTYLE.workout,life.workout);
 w.addSpacer(5);
 
-// ROW4 full width placeholders
+// ROW4 asset + live official AI news
 const row4=w.addStack();row4.spacing=8;
-function wideCard(iconName,title,color){
-  const c=row4.addStack();c.layoutVertically();c.backgroundColor=C.weakCard;c.cornerRadius=12;c.setPadding(5,9,5,9);c.size=new Size(160,42);
-  const h=c.addStack();h.centerAlignContent();icon(h,iconName,color,10);h.addSpacer(5);let x=h.addText(title);x.font=Font.boldSystemFont(9);x.textColor=C.text;h.addSpacer();x=h.addText("未接続");x.font=Font.systemFont(8);x.textColor=C.gray;c.addSpacer(3);x=c.addText("データソース未設定");x.font=Font.systemFont(7);x.textColor=C.gray;
+
+const assetCard=row4.addStack();assetCard.layoutVertically();assetCard.backgroundColor=C.weakCard;assetCard.cornerRadius=12;assetCard.setPadding(5,9,5,9);assetCard.size=new Size(118,48);
+let ah=assetCard.addStack();ah.centerAlignContent();icon(ah,"chart.line.uptrend.xyaxis",C.green,10);ah.addSpacer(5);
+let ax=ah.addText("資産");ax.font=Font.boldSystemFont(9);ax.textColor=C.text;ah.addSpacer();
+ax=ah.addText("未接続");ax.font=Font.systemFont(8);ax.textColor=C.gray;
+assetCard.addSpacer(3);ax=assetCard.addText("データソース未設定");ax.font=Font.systemFont(7);ax.textColor=C.gray;
+
+const newsCard=row4.addStack();newsCard.layoutVertically();newsCard.backgroundColor=C.weakCard;newsCard.cornerRadius=12;newsCard.setPadding(5,9,5,9);newsCard.size=new Size(210,48);
+let nh=newsCard.addStack();nh.centerAlignContent();icon(nh,"newspaper.fill",C.blue,10);nh.addSpacer(5);
+let nx=nh.addText("ニュース");nx.font=Font.boldSystemFont(9);nx.textColor=C.text;nh.addSpacer();
+nx=nh.addText(newsData.ok?"AI公式":"取得失敗");nx.font=Font.systemFont(8);nx.textColor=newsData.ok?C.green:C.red;
+newsCard.addSpacer(2);
+
+if(!newsData.ok || !newsData.items.length){
+  nx=newsCard.addText("公式RSSを取得できません");nx.font=Font.systemFont(8);nx.textColor=C.sub;
+}else{
+  newsData.items.forEach((item,i)=>{
+    const line=newsCard.addStack();line.centerAlignContent();
+    let src=line.addText(item.source);src.font=Font.semiboldSystemFont(7);src.textColor=C.blue;
+    line.addSpacer(4);
+    let title=line.addText(shorten(item.title,24));title.font=Font.systemFont(7);title.textColor=C.text;title.lineLimit=1;
+    if(item.link) line.url=item.link;
+    if(i<newsData.items.length-1) newsCard.addSpacer(2);
+  });
 }
-wideCard("chart.line.uptrend.xyaxis","資産",C.green);wideCard("newspaper.fill","ニュース",C.blue);
 
 w.addSpacer();
 const footer=w.addStack();footer.centerAlignContent();
-const ok=W.ok&&eventsData.ok&&tasksData.ok&&(universityData.reminderOK||universityData.calendarOK)&&life.sourcesOK;
+const ok=W.ok&&eventsData.ok&&tasksData.ok&&(universityData.reminderOK||universityData.calendarOK)&&life.sourcesOK&&newsData.ok;
 t=footer.addText("●");t.font=Font.systemFont(7);t.textColor=ok?C.green:C.orange;footer.addSpacer(4);
 t=footer.addText("最終取得");t.font=Font.systemFont(8);t.textColor=C.sub;footer.addSpacer(4);
 const rel=footer.addDate(fetchedAt);rel.applyRelativeStyle();rel.font=Font.systemFont(8);rel.textColor=C.sub;
